@@ -407,34 +407,34 @@ getDocs cache manager name version =
             home ++ "/docs.json"
     in
     File.exists path
-        |> Task.bind
+        |> Task.andThen
             (\exists ->
                 if exists then
                     File.readUtf8 path
-                        |> Task.bind
+                        |> Task.andThen
                             (\bytes ->
                                 case D.fromByteString Docs.decoder bytes of
                                     Ok docs ->
-                                        Task.pure (Ok docs)
+                                        Task.succeed (Ok docs)
 
                                     Err _ ->
                                         File.remove path
-                                            |> Task.fmap (\_ -> Err DP_Cache)
+                                            |> Task.map (\_ -> Err DP_Cache)
                             )
 
                 else
                     Website.metadata name version "docs.json"
-                        |> Task.bind
+                        |> Task.andThen
                             (\url ->
                                 Http.get manager url [] Exit.DP_Http <|
                                     \body ->
                                         case D.fromByteString Docs.decoder body of
                                             Ok docs ->
                                                 Utils.dirCreateDirectoryIfMissing True home
-                                                    |> Task.bind (\_ -> File.writeUtf8 path body)
-                                                    |> Task.fmap (\_ -> Ok docs)
+                                                    |> Task.andThen (\_ -> File.writeUtf8 path body)
+                                                    |> Task.map (\_ -> Ok docs)
 
                                             Err _ ->
-                                                Task.pure (Err (DP_Data url body))
+                                                Task.succeed (Err (DP_Data url body))
                             )
             )

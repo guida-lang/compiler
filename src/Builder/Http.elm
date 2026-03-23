@@ -66,7 +66,7 @@ managerDecoder =
 getManager : Task Never Manager
 getManager =
     -- TODO newManager tlsManagerSettings
-    Task.pure Manager
+    Task.succeed Manager
 
 
 

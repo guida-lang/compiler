@@ -39,28 +39,28 @@ run : Args -> Flags -> Task Never ()
 run _ (Flags autoYes) =
     Reporting.attempt Exit.upgradeToReport <|
         (Stuff.findRoot
-            |> Task.bind
+            |> Task.andThen
                 (\maybeRoot ->
                     case maybeRoot of
                         Nothing ->
-                            Task.pure (Err Exit.UpgradeNoOutline)
+                            Task.succeed (Err Exit.UpgradeNoOutline)
 
                         Just root ->
                             Task.run
                                 (Task.eio Exit.UpgradeBadRegistry Solver.initEnv
-                                    |> Task.bind
+                                    |> Task.andThen
                                         (\env ->
                                             Task.eio Exit.UpgradeBadOutline (Outline.read root)
-                                                |> Task.bind
+                                                |> Task.andThen
                                                     (\oldOutline ->
                                                         case oldOutline of
                                                             Outline.App outline ->
                                                                 makeAppPlan root env outline
-                                                                    |> Task.bind (\changes -> attemptChanges root env oldOutline V.toChars changes autoYes)
+                                                                    |> Task.andThen (\changes -> attemptChanges root env oldOutline V.toChars changes autoYes)
 
                                                             Outline.Pkg outline ->
                                                                 makePkgPlan root env outline
-                                                                    |> Task.bind (\changes -> attemptChanges root env oldOutline C.toChars changes autoYes)
+                                                                    |> Task.andThen (\changes -> attemptChanges root env oldOutline C.toChars changes autoYes)
                                                     )
                                         )
                                 )
@@ -111,32 +111,32 @@ attemptChangesHelp root env oldOutline newOutline autoYes question =
                     askQuestion : Task Never Bool
                     askQuestion =
                         if autoYes then
-                            Task.pure True
+                            Task.succeed True
 
                         else
                             Reporting.ask question
                 in
                 askQuestion
-                    |> Task.bind
+                    |> Task.andThen
                         (\approved ->
                             if approved then
                                 Outline.write root newOutline
-                                    |> Task.bind (\_ -> Details.verifyInstall scope root env newOutline)
-                                    |> Task.bind
+                                    |> Task.andThen (\_ -> Details.verifyInstall scope root env newOutline)
+                                    |> Task.andThen
                                         (\result ->
                                             case result of
                                                 Err exit ->
                                                     Outline.write root oldOutline
-                                                        |> Task.fmap (\_ -> Err exit)
+                                                        |> Task.map (\_ -> Err exit)
 
                                                 Ok () ->
                                                     IO.putStrLn "Success!"
-                                                        |> Task.fmap (\_ -> Ok ())
+                                                        |> Task.map (\_ -> Ok ())
                                         )
 
                             else
                                 IO.putStrLn "Okay, I did not change anything!"
-                                    |> Task.fmap (\_ -> Ok ())
+                                    |> Task.map (\_ -> Ok ())
                         )
             )
 
@@ -159,7 +159,7 @@ makeAppPlan root (Solver.Env cache _ connection registry) outline =
                     Dict.map (\_ -> C.untilNextMajor) (Dict.union direct testDirect)
             in
             Task.io (Solver.verify Target.GuidaTarget cache connection registry constraints)
-                |> Task.bind
+                |> Task.andThen
                     (\result ->
                         case result of
                             Solver.SolverOk details ->
@@ -193,22 +193,22 @@ makeAppPlan root (Solver.Env cache _ connection registry) outline =
                                         detectChanges oldAll newAll
                                 in
                                 if Dict.isEmpty changes then
-                                    Task.pure AlreadyUpgraded
+                                    Task.succeed AlreadyUpgraded
 
                                 else
-                                    Task.pure <|
+                                    Task.succeed <|
                                         Changes changes <|
                                             Outline.App <|
                                                 Outline.GuidaAppOutline guidaVersion sourceDirs newDirect newIndirect newTestDirect newTestIndirect
 
                             Solver.NoSolution ->
-                                Task.throw Exit.UpgradeGuidaNoOnlineSolution
+                                Task.fail Exit.UpgradeGuidaNoOnlineSolution
 
                             Solver.NoOfflineSolution ->
-                                Task.throw (Exit.UpgradeGuidaNoOfflineSolution (Stuff.rootPath root))
+                                Task.fail (Exit.UpgradeGuidaNoOfflineSolution (Stuff.rootPath root))
 
                             Solver.SolverErr exit ->
-                                Task.throw (Exit.UpgradeHadSolverTrouble exit)
+                                Task.fail (Exit.UpgradeHadSolverTrouble exit)
                     )
 
         Outline.ElmAppOutline elmVersion sourceDirs direct indirect testDirect testIndirect ->
@@ -222,7 +222,7 @@ makeAppPlan root (Solver.Env cache _ connection registry) outline =
                     Dict.map (\_ -> C.untilNextMajor) (Dict.union direct testDirect)
             in
             Task.io (Solver.verify Target.ElmTarget cache connection registry constraints)
-                |> Task.bind
+                |> Task.andThen
                     (\result ->
                         case result of
                             Solver.SolverOk details ->
@@ -256,22 +256,22 @@ makeAppPlan root (Solver.Env cache _ connection registry) outline =
                                         detectChanges oldAll newAll
                                 in
                                 if Dict.isEmpty changes then
-                                    Task.pure AlreadyUpgraded
+                                    Task.succeed AlreadyUpgraded
 
                                 else
-                                    Task.pure <|
+                                    Task.succeed <|
                                         Changes changes <|
                                             Outline.App <|
                                                 Outline.ElmAppOutline elmVersion sourceDirs newDirect newIndirect newTestDirect newTestIndirect
 
                             Solver.NoSolution ->
-                                Task.throw Exit.UpgradeElmNoOnlineSolution
+                                Task.fail Exit.UpgradeElmNoOnlineSolution
 
                             Solver.NoOfflineSolution ->
-                                Task.throw (Exit.UpgradeElmNoOfflineSolution (Stuff.rootPath root))
+                                Task.fail (Exit.UpgradeElmNoOfflineSolution (Stuff.rootPath root))
 
                             Solver.SolverErr exit ->
-                                Task.throw (Exit.UpgradeHadSolverTrouble exit)
+                                Task.fail (Exit.UpgradeHadSolverTrouble exit)
                     )
 
 
@@ -290,11 +290,11 @@ makePkgPlan root (Solver.Env cache _ connection registry) outline =
             in
             case toSafeConstraints oldAll of
                 Err pkg ->
-                    Task.throw (Exit.UpgradeCannotBuildSafeConstraint pkg)
+                    Task.fail (Exit.UpgradeCannotBuildSafeConstraint pkg)
 
                 Ok constraints ->
                     Task.io (Solver.verify Target.GuidaTarget cache connection registry constraints)
-                        |> Task.bind
+                        |> Task.andThen
                             (\result ->
                                 case result of
                                     Solver.SolverOk solved ->
@@ -324,22 +324,22 @@ makePkgPlan root (Solver.Env cache _ connection registry) outline =
                                                 detectChanges oldAll newAll
                                         in
                                         if Dict.isEmpty changes then
-                                            Task.pure AlreadyUpgraded
+                                            Task.succeed AlreadyUpgraded
 
                                         else
-                                            Task.pure <|
+                                            Task.succeed <|
                                                 Changes changes <|
                                                     Outline.Pkg <|
                                                         Outline.GuidaPkgOutline name summary license version exposed newDeps newTest guidaVersion
 
                                     Solver.NoSolution ->
-                                        Task.throw Exit.UpgradeGuidaNoOnlineSolution
+                                        Task.fail Exit.UpgradeGuidaNoOnlineSolution
 
                                     Solver.NoOfflineSolution ->
-                                        Task.throw (Exit.UpgradeGuidaNoOfflineSolution (Stuff.rootPath root))
+                                        Task.fail (Exit.UpgradeGuidaNoOfflineSolution (Stuff.rootPath root))
 
                                     Solver.SolverErr exit ->
-                                        Task.throw (Exit.UpgradeHadSolverTrouble exit)
+                                        Task.fail (Exit.UpgradeHadSolverTrouble exit)
                             )
 
         Outline.ElmPkgOutline name summary license version exposed deps test elmVersion ->
@@ -350,11 +350,11 @@ makePkgPlan root (Solver.Env cache _ connection registry) outline =
             in
             case toSafeConstraints oldAll of
                 Err pkg ->
-                    Task.throw (Exit.UpgradeCannotBuildSafeConstraint pkg)
+                    Task.fail (Exit.UpgradeCannotBuildSafeConstraint pkg)
 
                 Ok constraints ->
                     Task.io (Solver.verify Target.ElmTarget cache connection registry constraints)
-                        |> Task.bind
+                        |> Task.andThen
                             (\result ->
                                 case result of
                                     Solver.SolverOk solved ->
@@ -384,22 +384,22 @@ makePkgPlan root (Solver.Env cache _ connection registry) outline =
                                                 detectChanges oldAll newAll
                                         in
                                         if Dict.isEmpty changes then
-                                            Task.pure AlreadyUpgraded
+                                            Task.succeed AlreadyUpgraded
 
                                         else
-                                            Task.pure <|
+                                            Task.succeed <|
                                                 Changes changes <|
                                                     Outline.Pkg <|
                                                         Outline.ElmPkgOutline name summary license version exposed newDeps newTest elmVersion
 
                                     Solver.NoSolution ->
-                                        Task.throw Exit.UpgradeElmNoOnlineSolution
+                                        Task.fail Exit.UpgradeElmNoOnlineSolution
 
                                     Solver.NoOfflineSolution ->
-                                        Task.throw (Exit.UpgradeElmNoOfflineSolution (Stuff.rootPath root))
+                                        Task.fail (Exit.UpgradeElmNoOfflineSolution (Stuff.rootPath root))
 
                                     Solver.SolverErr exit ->
-                                        Task.throw (Exit.UpgradeHadSolverTrouble exit)
+                                        Task.fail (Exit.UpgradeHadSolverTrouble exit)
                             )
 
 

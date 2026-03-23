@@ -1,14 +1,10 @@
 module Utils.Task.Extra exposing
     ( apply
-    , bind
     , eio
-    , fmap
     , io
     , mapM
     , mio
-    , pure
     , run
-    , throw
     , void
     )
 
@@ -24,11 +20,6 @@ run task =
     task
         |> Task.map Ok
         |> Task.onError (Err >> Task.succeed)
-
-
-throw : x -> Task x a
-throw =
-    Task.fail
 
 
 
@@ -79,24 +70,9 @@ void =
     Task.map (always ())
 
 
-pure : a -> Task x a
-pure =
-    Task.succeed
-
-
 apply : Task x a -> Task x (a -> b) -> Task x b
 apply ma mf =
-    bind (\f -> bind (pure << f) ma) mf
-
-
-fmap : (a -> b) -> Task x a -> Task x b
-fmap =
-    Task.map
-
-
-bind : (a -> Task x b) -> Task x a -> Task x b
-bind =
-    Task.andThen
+    Task.andThen (\f -> Task.andThen (Task.succeed << f) ma) mf
 
 
 mapM : (a -> Task x b) -> List a -> Task x (List b)

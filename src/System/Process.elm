@@ -115,7 +115,7 @@ withCreateProcess createProcess f =
                 (Decode.field "ph" Decode.int)
             )
         )
-        |> Task.bind
+        |> Task.andThen
             (\( stdinHandle, ph ) ->
                 f (Maybe.map IO.Handle stdinHandle) Nothing Nothing (ProcessHandle ph)
             )

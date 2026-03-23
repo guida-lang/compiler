@@ -33,12 +33,12 @@ main =
 app : Task Never ()
 app =
     getArgs
-        |> Task.bind
+        |> Task.andThen
             (\args ->
                 case args of
                     InitArgs package ->
                         Init.run (Init.Flags package)
-                            |> Task.bind
+                            |> Task.andThen
                                 (\result ->
                                     case result of
                                         Ok () ->
@@ -50,7 +50,7 @@ app =
 
                     MakeArgs path debug optimize withSourceMaps ->
                         Make.run path (Make.Flags debug optimize withSourceMaps)
-                            |> Task.bind
+                            |> Task.andThen
                                 (\result ->
                                     case result of
                                         Ok output ->
@@ -72,7 +72,7 @@ app =
                         case P.fromByteString Pkg.parser Tuple.pair pkgString of
                             Ok pkg ->
                                 Install.run pkg
-                                    |> Task.bind (\_ -> exitWithResponse Encode.null)
+                                    |> Task.andThen (\_ -> exitWithResponse Encode.null)
 
                             Err _ ->
                                 exitWithResponse (Encode.object [ ( "error", Encode.string "Invalid package..." ) ])
@@ -81,14 +81,14 @@ app =
                         case P.fromByteString Pkg.parser Tuple.pair pkgString of
                             Ok pkg ->
                                 Uninstall.run pkg
-                                    |> Task.bind (\_ -> exitWithResponse Encode.null)
+                                    |> Task.andThen (\_ -> exitWithResponse Encode.null)
 
                             Err _ ->
                                 exitWithResponse (Encode.object [ ( "error", Encode.string "Invalid package..." ) ])
 
                     UpgradeArgs ->
                         Upgrade.run
-                            |> Task.bind (\_ -> exitWithResponse Encode.null)
+                            |> Task.andThen (\_ -> exitWithResponse Encode.null)
 
                     DiagnosticsArgs (DiagnosticsSourceContent src) ->
                         -- FIXME target
@@ -117,7 +117,7 @@ app =
 
                     DiagnosticsArgs (DiagnosticsSourcePath path) ->
                         Make.run path (Make.Flags False False False)
-                            |> Task.bind
+                            |> Task.andThen
                                 (\result ->
                                     case result of
                                         Ok _ ->
@@ -133,7 +133,7 @@ app =
 
                     GetDefinitionLocationArgs uri line character ->
                         GetDefinitionLocation.run uri line character
-                            |> Task.bind
+                            |> Task.andThen
                                 (\result ->
                                     case result of
                                         Ok location ->

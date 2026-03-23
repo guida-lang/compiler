@@ -32,7 +32,7 @@ import Utils.Task.Extra as Task
 app : D.Doc -> D.Doc -> List Command -> Task Never ()
 app intro outro commands =
     Utils.envGetArgs
-        |> Task.bind
+        |> Task.andThen
             (\argStrings ->
                 case argStrings of
                     [] ->
@@ -45,7 +45,7 @@ app intro outro commands =
                         IO.hPutStrLn IO.stdout
                             -- (V.toChars V.compiler)
                             "1.0.0-beta.2"
-                            |> Task.bind (\_ -> Exit.exitSuccess)
+                            |> Task.andThen (\_ -> Exit.exitSuccess)
 
                     command :: chunks ->
                         case List.find (\cmd -> toName cmd == command) commands of

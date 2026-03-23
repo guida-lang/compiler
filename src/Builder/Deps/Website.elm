@@ -15,16 +15,16 @@ import Utils.Task.Extra as Task
 domain : Task Never String
 domain =
     Utils.envLookupEnv "GUIDA_REGISTRY"
-        |> Task.fmap (Maybe.withDefault "https://package.guida-lang.org")
+        |> Task.map (Maybe.withDefault "https://package.guida-lang.org")
 
 
 route : String -> List ( String, String ) -> Task Never String
 route path params =
     domain
-        |> Task.fmap (\d -> Http.toUrl (d ++ path) params)
+        |> Task.map (\d -> Http.toUrl (d ++ path) params)
 
 
 metadata : Pkg.Name -> V.Version -> String -> Task Never String
 metadata name version file =
     domain
-        |> Task.fmap (\d -> d ++ "/packages/" ++ Pkg.toUrl name ++ "/" ++ V.toChars version ++ "/" ++ file)
+        |> Task.map (\d -> d ++ "/packages/" ++ Pkg.toUrl name ++ "/" ++ V.toChars version ++ "/" ++ file)

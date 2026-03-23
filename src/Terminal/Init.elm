@@ -39,10 +39,10 @@ run : () -> Flags -> Task Never ()
 run () (Flags package autoYes) =
     Reporting.attempt Exit.initToReport <|
         (Utils.dirDoesFileExist "guida.json"
-            |> Task.bind
+            |> Task.andThen
                 (\exists ->
                     if exists then
-                        Task.pure (Err Exit.InitAlreadyExists)
+                        Task.succeed (Err Exit.InitAlreadyExists)
 
                     else
                         let
@@ -50,7 +50,7 @@ run () (Flags package autoYes) =
                             askQuestion =
                                 if autoYes then
                                     Help.toStdout (information [ D.fromChars "" ])
-                                        |> Task.fmap (\_ -> True)
+                                        |> Task.map (\_ -> True)
 
                                 else
                                     Reporting.ask
@@ -60,14 +60,14 @@ run () (Flags package autoYes) =
                                         )
                         in
                         askQuestion
-                            |> Task.bind
+                            |> Task.andThen
                                 (\approved ->
                                     if approved then
                                         init package
 
                                     else
                                         IO.putStrLn "Okay, I did not make any changes!"
-                                            |> Task.fmap (\_ -> Ok ())
+                                            |> Task.map (\_ -> Ok ())
                                 )
                 )
         )
@@ -112,11 +112,11 @@ information question =
 init : Bool -> Task Never (Result Exit.Init ())
 init package =
     Solver.initEnv
-        |> Task.bind
+        |> Task.andThen
             (\eitherEnv ->
                 case eitherEnv of
                     Err problem ->
-                        Task.pure (Err (Exit.InitRegistryProblem problem))
+                        Task.succeed (Err (Exit.InitRegistryProblem problem))
 
                     Ok (Solver.Env cache _ connection registry) ->
                         verify cache connection registry defaults <|
@@ -124,9 +124,9 @@ init package =
                                 verify cache connection registry testDefaults <|
                                     \testDetails ->
                                         Utils.dirCreateDirectoryIfMissing True "src"
-                                            |> Task.bind (\_ -> Utils.dirCreateDirectoryIfMissing True "tests")
-                                            |> Task.bind (\_ -> File.writeUtf8 "tests/Example.guida" testExample)
-                                            |> Task.bind
+                                            |> Task.andThen (\_ -> Utils.dirCreateDirectoryIfMissing True "tests")
+                                            |> Task.andThen (\_ -> File.writeUtf8 "tests/Example.guida" testExample)
+                                            |> Task.andThen
                                                 (\_ ->
                                                     let
                                                         outline : Outline.Outline
@@ -206,26 +206,26 @@ init package =
                                                     in
                                                     Outline.write (Stuff.GuidaRoot ".") outline
                                                 )
-                                            |> Task.bind (\_ -> IO.putStrLn "Okay, I created it. Now read that link!")
-                                            |> Task.fmap (\_ -> Ok ())
+                                            |> Task.andThen (\_ -> IO.putStrLn "Okay, I created it. Now read that link!")
+                                            |> Task.map (\_ -> Ok ())
             )
 
 
 verify : Stuff.PackageCache -> Solver.Connection -> Registry.Registry -> Dict ( String, String ) Pkg.Name Con.Constraint -> (Dict ( String, String ) Pkg.Name Solver.Details -> Task Never (Result Exit.Init ())) -> Task Never (Result Exit.Init ())
 verify cache connection registry constraints callback =
     Solver.verify Target.GuidaTarget cache connection registry constraints
-        |> Task.bind
+        |> Task.andThen
             (\result ->
                 case result of
                     Solver.SolverErr exit ->
-                        Task.pure (Err (Exit.InitSolverProblem exit))
+                        Task.succeed (Err (Exit.InitSolverProblem exit))
 
                     Solver.NoSolution ->
-                        Task.pure (Err (Exit.InitNoSolution (Dict.keys compare constraints)))
+                        Task.succeed (Err (Exit.InitNoSolution (Dict.keys compare constraints)))
 
                     Solver.NoOfflineSolution ->
                         Task.io Website.domain
-                            |> Task.fmap
+                            |> Task.map
                                 (\registryDomain ->
                                     Err (Exit.InitNoOfflineSolution registryDomain (Dict.keys compare constraints))
                                 )

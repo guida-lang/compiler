@@ -27,28 +27,28 @@ run : Pkg.Name -> Task Never ()
 run pkg =
     Reporting.attempt Exit.installToReport
         (Stuff.findRoot
-            |> Task.bind
+            |> Task.andThen
                 (\maybeRoot ->
                     case maybeRoot of
                         Nothing ->
-                            Task.pure (Err Exit.InstallNoOutline)
+                            Task.succeed (Err Exit.InstallNoOutline)
 
                         Just root ->
                             Task.run
                                 (Task.eio Exit.InstallBadRegistry Solver.initEnv
-                                    |> Task.bind
+                                    |> Task.andThen
                                         (\env ->
                                             Task.eio Exit.InstallBadOutline (Outline.read root)
-                                                |> Task.bind
+                                                |> Task.andThen
                                                     (\oldOutline ->
                                                         case oldOutline of
                                                             Outline.App outline ->
                                                                 makeAppPlan root env pkg outline
-                                                                    |> Task.bind (\changes -> attemptChanges root env oldOutline changes)
+                                                                    |> Task.andThen (\changes -> attemptChanges root env oldOutline changes)
 
                                                             Outline.Pkg outline ->
                                                                 makePkgPlan root env pkg outline
-                                                                    |> Task.bind (\changes -> attemptChanges root env oldOutline changes)
+                                                                    |> Task.andThen (\changes -> attemptChanges root env oldOutline changes)
                                                     )
                                         )
                                 )
@@ -89,17 +89,17 @@ attemptChangesHelp root env oldOutline newOutline =
         BW.withScope
             (\scope ->
                 Outline.write root newOutline
-                    |> Task.bind (\_ -> Details.verifyInstall scope root env newOutline)
-                    |> Task.bind
+                    |> Task.andThen (\_ -> Details.verifyInstall scope root env newOutline)
+                    |> Task.andThen
                         (\result ->
                             case result of
                                 Err exit ->
                                     Outline.write root oldOutline
-                                        |> Task.fmap (\_ -> Err exit)
+                                        |> Task.map (\_ -> Err exit)
 
                                 Ok () ->
                                     IO.putStrLn "Success!"
-                                        |> Task.fmap (\_ -> Ok ())
+                                        |> Task.map (\_ -> Ok ())
                         )
             )
 
@@ -113,13 +113,13 @@ makeAppPlan root (Solver.Env cache _ connection registry) pkg outline =
     case outline of
         Outline.GuidaAppOutline guidaVersion sourceDirs direct indirect testDirect testIndirect ->
             if Dict.member identity pkg direct then
-                Task.pure AlreadyInstalled
+                Task.succeed AlreadyInstalled
 
             else
                 -- is it already indirect?
                 case Dict.get identity pkg indirect of
                     Just vsn ->
-                        Task.pure <|
+                        Task.succeed <|
                             PromoteIndirect <|
                                 Outline.App <|
                                     Outline.GuidaAppOutline guidaVersion
@@ -133,7 +133,7 @@ makeAppPlan root (Solver.Env cache _ connection registry) pkg outline =
                         -- is it already a test dependency?
                         case Dict.get identity pkg testDirect of
                             Just vsn ->
-                                Task.pure <|
+                                Task.succeed <|
                                     PromoteTest <|
                                         Outline.App <|
                                             Outline.GuidaAppOutline guidaVersion
@@ -147,7 +147,7 @@ makeAppPlan root (Solver.Env cache _ connection registry) pkg outline =
                                 -- is it already an indirect test dependency?
                                 case Dict.get identity pkg testIndirect of
                                     Just vsn ->
-                                        Task.pure <|
+                                        Task.succeed <|
                                             PromoteTest <|
                                                 Outline.App <|
                                                     Outline.GuidaAppOutline guidaVersion
@@ -163,38 +163,38 @@ makeAppPlan root (Solver.Env cache _ connection registry) pkg outline =
                                             Err suggestions ->
                                                 case connection of
                                                     Solver.Online _ ->
-                                                        Task.throw (Exit.InstallUnknownPackageOnline (Stuff.rootPath root) pkg suggestions)
+                                                        Task.fail (Exit.InstallUnknownPackageOnline (Stuff.rootPath root) pkg suggestions)
 
                                                     Solver.Offline ->
-                                                        Task.throw (Exit.InstallUnknownPackageOffline (Stuff.rootPath root) pkg suggestions)
+                                                        Task.fail (Exit.InstallUnknownPackageOffline (Stuff.rootPath root) pkg suggestions)
 
                                             Ok _ ->
                                                 Task.io (Solver.addToApp cache connection registry pkg outline False)
-                                                    |> Task.bind
+                                                    |> Task.andThen
                                                         (\result ->
                                                             case result of
                                                                 Solver.SolverOk (Solver.AppSolution _ _ app) ->
-                                                                    Task.pure (Changes (Outline.App app))
+                                                                    Task.succeed (Changes (Outline.App app))
 
                                                                 Solver.NoSolution ->
-                                                                    Task.throw (Exit.InstallGuidaNoOnlineAppSolution pkg)
+                                                                    Task.fail (Exit.InstallGuidaNoOnlineAppSolution pkg)
 
                                                                 Solver.NoOfflineSolution ->
-                                                                    Task.throw (Exit.InstallGuidaNoOfflineAppSolution (Stuff.rootPath root) pkg)
+                                                                    Task.fail (Exit.InstallGuidaNoOfflineAppSolution (Stuff.rootPath root) pkg)
 
                                                                 Solver.SolverErr exit ->
-                                                                    Task.throw (Exit.InstallHadSolverTrouble exit)
+                                                                    Task.fail (Exit.InstallHadSolverTrouble exit)
                                                         )
 
         Outline.ElmAppOutline elmVersion sourceDirs direct indirect testDirect testIndirect ->
             if Dict.member identity pkg direct then
-                Task.pure AlreadyInstalled
+                Task.succeed AlreadyInstalled
 
             else
                 -- is it already indirect?
                 case Dict.get identity pkg indirect of
                     Just vsn ->
-                        Task.pure <|
+                        Task.succeed <|
                             PromoteIndirect <|
                                 Outline.App <|
                                     Outline.ElmAppOutline elmVersion
@@ -208,7 +208,7 @@ makeAppPlan root (Solver.Env cache _ connection registry) pkg outline =
                         -- is it already a test dependency?
                         case Dict.get identity pkg testDirect of
                             Just vsn ->
-                                Task.pure <|
+                                Task.succeed <|
                                     PromoteTest <|
                                         Outline.App <|
                                             Outline.ElmAppOutline elmVersion
@@ -222,7 +222,7 @@ makeAppPlan root (Solver.Env cache _ connection registry) pkg outline =
                                 -- is it already an indirect test dependency?
                                 case Dict.get identity pkg testIndirect of
                                     Just vsn ->
-                                        Task.pure <|
+                                        Task.succeed <|
                                             PromoteTest <|
                                                 Outline.App <|
                                                     Outline.ElmAppOutline elmVersion
@@ -238,27 +238,27 @@ makeAppPlan root (Solver.Env cache _ connection registry) pkg outline =
                                             Err suggestions ->
                                                 case connection of
                                                     Solver.Online _ ->
-                                                        Task.throw (Exit.InstallUnknownPackageOnline (Stuff.rootPath root) pkg suggestions)
+                                                        Task.fail (Exit.InstallUnknownPackageOnline (Stuff.rootPath root) pkg suggestions)
 
                                                     Solver.Offline ->
-                                                        Task.throw (Exit.InstallUnknownPackageOffline (Stuff.rootPath root) pkg suggestions)
+                                                        Task.fail (Exit.InstallUnknownPackageOffline (Stuff.rootPath root) pkg suggestions)
 
                                             Ok _ ->
                                                 Task.io (Solver.addToApp cache connection registry pkg outline False)
-                                                    |> Task.bind
+                                                    |> Task.andThen
                                                         (\result ->
                                                             case result of
                                                                 Solver.SolverOk (Solver.AppSolution _ _ app) ->
-                                                                    Task.pure (Changes (Outline.App app))
+                                                                    Task.succeed (Changes (Outline.App app))
 
                                                                 Solver.NoSolution ->
-                                                                    Task.throw (Exit.InstallElmNoOnlineAppSolution pkg)
+                                                                    Task.fail (Exit.InstallElmNoOnlineAppSolution pkg)
 
                                                                 Solver.NoOfflineSolution ->
-                                                                    Task.throw (Exit.InstallGuidaNoOfflineAppSolution (Stuff.rootPath root) pkg)
+                                                                    Task.fail (Exit.InstallGuidaNoOfflineAppSolution (Stuff.rootPath root) pkg)
 
                                                                 Solver.SolverErr exit ->
-                                                                    Task.throw (Exit.InstallHadSolverTrouble exit)
+                                                                    Task.fail (Exit.InstallHadSolverTrouble exit)
                                                         )
 
 
@@ -271,13 +271,13 @@ makePkgPlan root (Solver.Env cache _ connection registry) pkg outline =
     case outline of
         Outline.GuidaPkgOutline name summary license version exposed deps test guidaVersion ->
             if Dict.member identity pkg deps then
-                Task.pure AlreadyInstalled
+                Task.succeed AlreadyInstalled
 
             else
                 -- is already in test dependencies?
                 case Dict.get identity pkg test of
                     Just con ->
-                        Task.pure <|
+                        Task.succeed <|
                             PromoteTest <|
                                 Outline.Pkg <|
                                     Outline.GuidaPkgOutline name
@@ -295,10 +295,10 @@ makePkgPlan root (Solver.Env cache _ connection registry) pkg outline =
                             Err suggestions ->
                                 case connection of
                                     Solver.Online _ ->
-                                        Task.throw (Exit.InstallUnknownPackageOnline (Stuff.rootPath root) pkg suggestions)
+                                        Task.fail (Exit.InstallUnknownPackageOnline (Stuff.rootPath root) pkg suggestions)
 
                                     Solver.Offline ->
-                                        Task.throw (Exit.InstallUnknownPackageOffline (Stuff.rootPath root) pkg suggestions)
+                                        Task.fail (Exit.InstallUnknownPackageOffline (Stuff.rootPath root) pkg suggestions)
 
                             Ok (Registry.KnownVersions _ _) ->
                                 let
@@ -311,7 +311,7 @@ makePkgPlan root (Solver.Env cache _ connection registry) pkg outline =
                                         Dict.insert identity pkg C.anything old
                                 in
                                 Task.io (Solver.verify Target.GuidaTarget cache connection registry cons)
-                                    |> Task.bind
+                                    |> Task.andThen
                                         (\result ->
                                             case result of
                                                 Solver.SolverOk solution ->
@@ -335,7 +335,7 @@ makePkgPlan root (Solver.Env cache _ connection registry) pkg outline =
                                                         news =
                                                             Utils.mapMapMaybe identity Pkg.compareName keepNew changes
                                                     in
-                                                    Task.pure <|
+                                                    Task.succeed <|
                                                         Changes <|
                                                             Outline.Pkg <|
                                                                 Outline.GuidaPkgOutline name
@@ -348,24 +348,24 @@ makePkgPlan root (Solver.Env cache _ connection registry) pkg outline =
                                                                     guidaVersion
 
                                                 Solver.NoSolution ->
-                                                    Task.throw (Exit.InstallGuidaNoOnlinePkgSolution pkg)
+                                                    Task.fail (Exit.InstallGuidaNoOnlinePkgSolution pkg)
 
                                                 Solver.NoOfflineSolution ->
-                                                    Task.throw (Exit.InstallGuidaNoOfflinePkgSolution (Stuff.rootPath root) pkg)
+                                                    Task.fail (Exit.InstallGuidaNoOfflinePkgSolution (Stuff.rootPath root) pkg)
 
                                                 Solver.SolverErr exit ->
-                                                    Task.throw (Exit.InstallHadSolverTrouble exit)
+                                                    Task.fail (Exit.InstallHadSolverTrouble exit)
                                         )
 
         Outline.ElmPkgOutline name summary license version exposed deps test elmVersion ->
             if Dict.member identity pkg deps then
-                Task.pure AlreadyInstalled
+                Task.succeed AlreadyInstalled
 
             else
                 -- is already in test dependencies?
                 case Dict.get identity pkg test of
                     Just con ->
-                        Task.pure <|
+                        Task.succeed <|
                             PromoteTest <|
                                 Outline.Pkg <|
                                     Outline.ElmPkgOutline name
@@ -383,10 +383,10 @@ makePkgPlan root (Solver.Env cache _ connection registry) pkg outline =
                             Err suggestions ->
                                 case connection of
                                     Solver.Online _ ->
-                                        Task.throw (Exit.InstallUnknownPackageOnline (Stuff.rootPath root) pkg suggestions)
+                                        Task.fail (Exit.InstallUnknownPackageOnline (Stuff.rootPath root) pkg suggestions)
 
                                     Solver.Offline ->
-                                        Task.throw (Exit.InstallUnknownPackageOffline (Stuff.rootPath root) pkg suggestions)
+                                        Task.fail (Exit.InstallUnknownPackageOffline (Stuff.rootPath root) pkg suggestions)
 
                             Ok (Registry.KnownVersions _ _) ->
                                 let
@@ -399,7 +399,7 @@ makePkgPlan root (Solver.Env cache _ connection registry) pkg outline =
                                         Dict.insert identity pkg C.anything old
                                 in
                                 Task.io (Solver.verify Target.ElmTarget cache connection registry cons)
-                                    |> Task.bind
+                                    |> Task.andThen
                                         (\result ->
                                             case result of
                                                 Solver.SolverOk solution ->
@@ -423,7 +423,7 @@ makePkgPlan root (Solver.Env cache _ connection registry) pkg outline =
                                                         news =
                                                             Utils.mapMapMaybe identity Pkg.compareName keepNew changes
                                                     in
-                                                    Task.pure <|
+                                                    Task.succeed <|
                                                         Changes <|
                                                             Outline.Pkg <|
                                                                 Outline.ElmPkgOutline name
@@ -436,13 +436,13 @@ makePkgPlan root (Solver.Env cache _ connection registry) pkg outline =
                                                                     elmVersion
 
                                                 Solver.NoSolution ->
-                                                    Task.throw (Exit.InstallElmNoOnlinePkgSolution pkg)
+                                                    Task.fail (Exit.InstallElmNoOnlinePkgSolution pkg)
 
                                                 Solver.NoOfflineSolution ->
-                                                    Task.throw (Exit.InstallElmNoOfflinePkgSolution (Stuff.rootPath root) pkg)
+                                                    Task.fail (Exit.InstallElmNoOfflinePkgSolution (Stuff.rootPath root) pkg)
 
                                                 Solver.SolverErr exit ->
-                                                    Task.throw (Exit.InstallHadSolverTrouble exit)
+                                                    Task.fail (Exit.InstallHadSolverTrouble exit)
                                         )
 
 

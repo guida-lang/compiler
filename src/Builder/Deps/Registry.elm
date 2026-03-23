@@ -78,7 +78,7 @@ fetch manager cache =
                     Stuff.registry cache
             in
             File.writeBinary registryEncoder path registry
-                |> Task.fmap (\_ -> registry)
+                |> Task.map (\_ -> registry)
 
 
 addEntry : KnownVersions -> Int -> Int
@@ -152,7 +152,7 @@ update manager cache ((Registry size packages) as oldRegistry) =
         \news ->
             case news of
                 [] ->
-                    Task.pure oldRegistry
+                    Task.succeed oldRegistry
 
                 _ :: _ ->
                     let
@@ -169,7 +169,7 @@ update manager cache ((Registry size packages) as oldRegistry) =
                             Registry newSize newPkgs
                     in
                     File.writeBinary registryEncoder (Stuff.registry cache) newRegistry
-                        |> Task.fmap (\_ -> newRegistry)
+                        |> Task.map (\_ -> newRegistry)
 
 
 addNew : ( Pkg.Name, ( Syntax, V.Version ) ) -> Dict ( String, String ) Pkg.Name KnownVersions -> Dict ( String, String ) Pkg.Name KnownVersions
@@ -229,7 +229,7 @@ bail _ _ =
 latest : Http.Manager -> Stuff.PackageCache -> Task Never (Result Exit.RegistryProblem Registry)
 latest manager cache =
     read cache
-        |> Task.bind
+        |> Task.andThen
             (\maybeOldRegistry ->
                 case maybeOldRegistry of
                     Just oldRegistry ->
@@ -285,16 +285,16 @@ getVersions_ filterVersions name ((Registry _ versions) as registry) =
 post : Http.Manager -> String -> D.Decoder x a -> (a -> Task Never b) -> Task Never (Result Exit.RegistryProblem b)
 post manager path decoder callback =
     Website.route path []
-        |> Task.bind
+        |> Task.andThen
             (\url ->
                 Http.post manager url [] Exit.RP_Http <|
                     \body ->
                         case D.fromByteString decoder body of
                             Ok a ->
-                                Task.fmap Ok (callback a)
+                                Task.map Ok (callback a)
 
                             Err _ ->
-                                Task.pure <| Err <| Exit.RP_Data url body
+                                Task.succeed <| Err <| Exit.RP_Data url body
             )
 
 

@@ -32,7 +32,7 @@ version =
         { singular = "version"
         , plural = "versions"
         , suggest = suggestVersion
-        , examples = Task.pure << exampleVersions
+        , examples = Task.succeed << exampleVersions
         }
 
 
@@ -48,7 +48,7 @@ parseVersion chars =
 
 suggestVersion : String -> Task Never (List String)
 suggestVersion _ =
-    Task.pure []
+    Task.succeed []
 
 
 exampleVersions : String -> List String
@@ -89,7 +89,7 @@ guidaOrElmFile =
     Parser
         { singular = "guida or elm file"
         , plural = "guida or elm files"
-        , suggest = \_ -> Task.pure []
+        , suggest = \_ -> Task.succeed []
         , examples = exampleGuidaOrElmFiles
         }
 
@@ -109,7 +109,7 @@ parseGuidaOrElmFile chars =
 
 exampleGuidaOrElmFiles : String -> Task Never (List String)
 exampleGuidaOrElmFiles _ =
-    Task.pure [ "Main.guida", "src/Main.guida", "Main.elm" ]
+    Task.succeed [ "Main.guida", "src/Main.guida", "Main.elm" ]
 
 
 
@@ -121,7 +121,7 @@ filePath =
     Parser
         { singular = "file path"
         , plural = "file paths"
-        , suggest = \_ -> Task.pure []
+        , suggest = \_ -> Task.succeed []
         , examples = exampleFilePaths
         }
 
@@ -133,7 +133,7 @@ parseFilePath =
 
 exampleFilePaths : String -> Task Never (List String)
 exampleFilePaths _ =
-    Task.pure [ "Main.guida", "src" ]
+    Task.succeed [ "Main.guida", "src" ]
 
 
 
@@ -163,10 +163,10 @@ parsePackage chars =
 suggestPackages : String -> Task Never (List String)
 suggestPackages given =
     Stuff.getPackageCache
-        |> Task.bind
+        |> Task.andThen
             (\cache ->
                 Registry.read cache
-                    |> Task.fmap
+                    |> Task.map
                         (\maybeRegistry ->
                             case maybeRegistry of
                                 Nothing ->
@@ -182,10 +182,10 @@ suggestPackages given =
 examplePackages : String -> Task Never (List String)
 examplePackages given =
     Stuff.getPackageCache
-        |> Task.bind
+        |> Task.andThen
             (\cache ->
                 Registry.read cache
-                    |> Task.fmap
+                    |> Task.map
                         (\maybeRegistry ->
                             case maybeRegistry of
                                 Nothing ->

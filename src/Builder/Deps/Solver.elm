@@ -91,7 +91,7 @@ verify target cache connection registry constraints =
         case try target constraints of
             Solver solver ->
                 solver (State cache connection registry Dict.empty)
-                    |> Task.fmap
+                    |> Task.map
                         (\result ->
                             case result of
                                 ISOk s a ->
@@ -206,7 +206,7 @@ addToApp cache connection registry pkg outline forTest =
                 of
                     Solver solver ->
                         solver (State cache connection registry Dict.empty)
-                            |> Task.fmap
+                            |> Task.map
                                 (\result ->
                                     case result of
                                         ISOk (State _ _ _ constraints) new ->
@@ -274,7 +274,7 @@ addToApp cache connection registry pkg outline forTest =
                 of
                     Solver solver ->
                         solver (State cache connection registry Dict.empty)
-                            |> Task.fmap
+                            |> Task.map
                                 (\result ->
                                     case result of
                                         ISOk (State _ _ _ constraints) new ->
@@ -350,7 +350,7 @@ addToTestApp cache connection registry pkg con outline =
                 of
                     Solver solver ->
                         solver (State cache connection registry Dict.empty)
-                            |> Task.fmap
+                            |> Task.map
                                 (\result ->
                                     case result of
                                         ISOk (State _ _ _ constraints) new ->
@@ -410,7 +410,7 @@ addToTestApp cache connection registry pkg con outline =
                 of
                     Solver solver ->
                         solver (State cache connection registry Dict.empty)
-                            |> Task.fmap
+                            |> Task.map
                                 (\result ->
                                     case result of
                                         ISOk (State _ _ _ constraints) new ->
@@ -458,7 +458,7 @@ removeFromApp cache connection registry pkg outline =
                 case try Target.GuidaTarget (Dict.map (\_ -> C.exactly) (Dict.remove identity pkg allDirects)) of
                     Solver solver ->
                         solver (State cache connection registry Dict.empty)
-                            |> Task.fmap
+                            |> Task.map
                                 (\result ->
                                     case result of
                                         ISOk (State _ _ _ constraints) new ->
@@ -506,7 +506,7 @@ removeFromApp cache connection registry pkg outline =
                 case try Target.ElmTarget (Dict.map (\_ -> C.exactly) (Dict.remove identity pkg allDirects)) of
                     Solver solver ->
                         solver (State cache connection registry Dict.empty)
-                            |> Task.fmap
+                            |> Task.map
                                 (\result ->
                                     case result of
                                         ISOk (State _ _ _ constraints) new ->
@@ -658,13 +658,13 @@ getRelevantVersions name constraint =
                 Just (Registry.KnownVersions ( _, newest ) previous) ->
                     case List.filter (C.satisfies constraint) (newest :: List.map Tuple.second previous) of
                         [] ->
-                            Task.pure (ISBack state)
+                            Task.succeed (ISBack state)
 
                         v :: vs ->
-                            Task.pure (ISOk state ( v, vs ))
+                            Task.succeed (ISOk state ( v, vs ))
 
                 Nothing ->
-                    Task.pure (ISBack state)
+                    Task.succeed (ISBack state)
 
 
 
@@ -682,7 +682,7 @@ getConstraints pkg vsn =
             in
             case Dict.get (Tuple.mapSecond V.toComparable) key cDict of
                 Just cs ->
-                    Task.pure (ISOk state cs)
+                    Task.succeed (ISOk state cs)
 
                 Nothing ->
                     let
@@ -699,21 +699,21 @@ getConstraints pkg vsn =
                             home ++ "/guida.json"
                     in
                     File.exists guidaPath
-                        |> Task.bind
+                        |> Task.andThen
                             (\guidaOutlineExists ->
                                 if guidaOutlineExists then
                                     File.readUtf8 guidaPath
-                                        |> Task.bind
+                                        |> Task.andThen
                                             (\bytes ->
                                                 case D.fromByteString constraintsDecoder bytes of
                                                     Ok cs ->
                                                         case connection of
                                                             Online _ ->
-                                                                Task.pure (ISOk (toNewState cs) cs)
+                                                                Task.succeed (ISOk (toNewState cs) cs)
 
                                                             Offline ->
                                                                 Utils.dirDoesDirectoryExist (Stuff.package cache pkg vsn ++ "/src")
-                                                                    |> Task.fmap
+                                                                    |> Task.map
                                                                         (\srcExists ->
                                                                             if srcExists then
                                                                                 ISOk (toNewState cs) cs
@@ -724,7 +724,7 @@ getConstraints pkg vsn =
 
                                                     Err _ ->
                                                         File.remove guidaPath
-                                                            |> Task.fmap (\_ -> ISErr (Exit.SolverBadCacheGuidaData pkg vsn))
+                                                            |> Task.map (\_ -> ISErr (Exit.SolverBadCacheGuidaData pkg vsn))
                                             )
 
                                 else
@@ -734,21 +734,21 @@ getConstraints pkg vsn =
                                             home ++ "/elm.json"
                                     in
                                     File.exists guidaPath
-                                        |> Task.bind
+                                        |> Task.andThen
                                             (\elmOutlineExists ->
                                                 if elmOutlineExists then
                                                     File.readUtf8 elmPath
-                                                        |> Task.bind
+                                                        |> Task.andThen
                                                             (\bytes ->
                                                                 case D.fromByteString constraintsDecoder bytes of
                                                                     Ok cs ->
                                                                         case connection of
                                                                             Online _ ->
-                                                                                Task.pure (ISOk (toNewState cs) cs)
+                                                                                Task.succeed (ISOk (toNewState cs) cs)
 
                                                                             Offline ->
                                                                                 Utils.dirDoesDirectoryExist (Stuff.package cache pkg vsn ++ "/src")
-                                                                                    |> Task.fmap
+                                                                                    |> Task.map
                                                                                         (\srcExists ->
                                                                                             if srcExists then
                                                                                                 ISOk (toNewState cs) cs
@@ -759,52 +759,52 @@ getConstraints pkg vsn =
 
                                                                     Err _ ->
                                                                         File.remove elmPath
-                                                                            |> Task.fmap (\_ -> ISErr (Exit.SolverBadCacheElmData pkg vsn))
+                                                                            |> Task.map (\_ -> ISErr (Exit.SolverBadCacheElmData pkg vsn))
                                                             )
 
                                                 else
                                                     case connection of
                                                         Offline ->
-                                                            Task.pure (ISBack state)
+                                                            Task.succeed (ISBack state)
 
                                                         Online manager ->
                                                             Website.metadata pkg vsn "guida.json"
-                                                                |> Task.bind
+                                                                |> Task.andThen
                                                                     (\guidaUrl ->
-                                                                        Http.get manager guidaUrl [] identity (Task.pure << Ok)
-                                                                            |> Task.bind
+                                                                        Http.get manager guidaUrl [] identity (Task.succeed << Ok)
+                                                                            |> Task.andThen
                                                                                 (\guidaResult ->
                                                                                     case guidaResult of
                                                                                         Err guidaHttpProblem ->
-                                                                                            Task.pure (ISErr (Exit.SolverBadHttp pkg vsn guidaHttpProblem))
+                                                                                            Task.succeed (ISErr (Exit.SolverBadHttp pkg vsn guidaHttpProblem))
 
                                                                                         Ok guidaBody ->
                                                                                             case D.fromByteString constraintsDecoder guidaBody of
                                                                                                 Ok cs ->
                                                                                                     Utils.dirCreateDirectoryIfMissing True home
-                                                                                                        |> Task.bind (\_ -> File.writeUtf8 guidaPath guidaBody)
-                                                                                                        |> Task.fmap (\_ -> ISOk (toNewState cs) cs)
+                                                                                                        |> Task.andThen (\_ -> File.writeUtf8 guidaPath guidaBody)
+                                                                                                        |> Task.map (\_ -> ISOk (toNewState cs) cs)
 
                                                                                                 Err _ ->
                                                                                                     Website.metadata pkg vsn "elm.json"
-                                                                                                        |> Task.bind
+                                                                                                        |> Task.andThen
                                                                                                             (\elmUrl ->
-                                                                                                                Http.get manager elmUrl [] identity (Task.pure << Ok)
-                                                                                                                    |> Task.bind
+                                                                                                                Http.get manager elmUrl [] identity (Task.succeed << Ok)
+                                                                                                                    |> Task.andThen
                                                                                                                         (\elmResult ->
                                                                                                                             case elmResult of
                                                                                                                                 Err elmHttpProblem ->
-                                                                                                                                    Task.pure (ISErr (Exit.SolverBadHttp pkg vsn elmHttpProblem))
+                                                                                                                                    Task.succeed (ISErr (Exit.SolverBadHttp pkg vsn elmHttpProblem))
 
                                                                                                                                 Ok elmBody ->
                                                                                                                                     case D.fromByteString constraintsDecoder elmBody of
                                                                                                                                         Ok cs ->
                                                                                                                                             Utils.dirCreateDirectoryIfMissing True home
-                                                                                                                                                |> Task.bind (\_ -> File.writeUtf8 elmPath elmBody)
-                                                                                                                                                |> Task.fmap (\_ -> ISOk (toNewState cs) cs)
+                                                                                                                                                |> Task.andThen (\_ -> File.writeUtf8 elmPath elmBody)
+                                                                                                                                                |> Task.map (\_ -> ISOk (toNewState cs) cs)
 
                                                                                                                                         Err _ ->
-                                                                                                                                            Task.pure (ISErr (Exit.SolverBadHttpElmData pkg vsn elmUrl))
+                                                                                                                                            Task.succeed (ISErr (Exit.SolverBadHttpElmData pkg vsn elmUrl))
                                                                                                                         )
                                                                                                             )
                                                                                 )
@@ -845,25 +845,25 @@ type Env
 initEnv : Task Never (Result Exit.RegistryProblem Env)
 initEnv =
     MVar.newEmptyMVar
-        |> Task.bind
+        |> Task.andThen
             (\mvar ->
-                Process.spawn (Task.bind (MVar.putMVar mvar) Http.getManager)
-                    |> Task.bind
+                Process.spawn (Task.andThen (MVar.putMVar mvar) Http.getManager)
+                    |> Task.andThen
                         (\_ ->
                             Stuff.getPackageCache
-                                |> Task.bind
+                                |> Task.andThen
                                     (\cache ->
                                         Stuff.withRegistryLock cache
                                             (Registry.read cache
-                                                |> Task.bind
+                                                |> Task.andThen
                                                     (\maybeRegistry ->
                                                         MVar.readMVar mvar
-                                                            |> Task.bind
+                                                            |> Task.andThen
                                                                 (\manager ->
                                                                     case maybeRegistry of
                                                                         Nothing ->
                                                                             Registry.fetch manager cache
-                                                                                |> Task.fmap
+                                                                                |> Task.map
                                                                                     (\eitherRegistry ->
                                                                                         case eitherRegistry of
                                                                                             Ok latestRegistry ->
@@ -875,7 +875,7 @@ initEnv =
 
                                                                         Just cachedRegistry ->
                                                                             Registry.update manager cache cachedRegistry
-                                                                                |> Task.fmap
+                                                                                |> Task.map
                                                                                     (\eitherRegistry ->
                                                                                         case eitherRegistry of
                                                                                             Ok latestRegistry ->
@@ -901,7 +901,7 @@ fmap func (Solver solver) =
     Solver <|
         \state ->
             solver state
-                |> Task.fmap
+                |> Task.map
                     (\result ->
                         case result of
                             ISOk stateA arg ->
@@ -917,7 +917,7 @@ fmap func (Solver solver) =
 
 pure : a -> Solver a
 pure a =
-    Solver (\state -> Task.pure (ISOk state a))
+    Solver (\state -> Task.succeed (ISOk state a))
 
 
 bind : (a -> Solver b) -> Solver a -> Solver b
@@ -925,7 +925,7 @@ bind callback (Solver solverA) =
     Solver <|
         \state ->
             solverA state
-                |> Task.bind
+                |> Task.andThen
                     (\resA ->
                         case resA of
                             ISOk stateA a ->
@@ -934,10 +934,10 @@ bind callback (Solver solverA) =
                                         solverB stateA
 
                             ISBack stateA ->
-                                Task.pure (ISBack stateA)
+                                Task.succeed (ISBack stateA)
 
                             ISErr e ->
-                                Task.pure (ISErr e)
+                                Task.succeed (ISErr e)
                     )
 
 
@@ -951,11 +951,11 @@ oneOf ((Solver solverHead) as solver) solvers =
             Solver <|
                 \state0 ->
                     solverHead state0
-                        |> Task.bind
+                        |> Task.andThen
                             (\result ->
                                 case result of
                                     ISOk stateA arg ->
-                                        Task.pure (ISOk stateA arg)
+                                        Task.succeed (ISOk stateA arg)
 
                                     ISBack stateA ->
                                         let
@@ -965,7 +965,7 @@ oneOf ((Solver solverHead) as solver) solvers =
                                         solverTail stateA
 
                                     ISErr e ->
-                                        Task.pure (ISErr e)
+                                        Task.succeed (ISErr e)
                             )
 
 
@@ -973,7 +973,7 @@ backtrack : Solver a
 backtrack =
     Solver <|
         \state ->
-            Task.pure (ISBack state)
+            Task.succeed (ISBack state)
 
 
 foldM : (b -> a -> Solver b) -> b -> List a -> Solver b

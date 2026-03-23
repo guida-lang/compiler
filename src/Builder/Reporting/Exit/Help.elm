@@ -130,7 +130,7 @@ toStderr doc =
 toHandle : IO.Handle -> D.Doc -> Task Never ()
 toHandle handle doc =
     IO.hIsTerminalDevice handle
-        |> Task.bind
+        |> Task.andThen
             (\isTerminal ->
                 if isTerminal then
                     D.toAnsi handle doc

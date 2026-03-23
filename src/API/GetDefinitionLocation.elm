@@ -38,14 +38,14 @@ type alias Position =
 run : String -> Int -> Int -> Task Never (Result () Location)
 run uri line character =
     Stuff.findRootIn (Utils.fpDropFileName uri)
-        |> Task.bind
+        |> Task.andThen
             (\maybeRoot ->
                 case maybeRoot of
                     Just root ->
                         runHelp root uri line character
 
                     Nothing ->
-                        Task.pure (Err ())
+                        Task.succeed (Err ())
             )
 
 
@@ -53,7 +53,7 @@ runHelp : Stuff.Root -> String -> Int -> Int -> Task Never (Result () Location)
 runHelp _ uri requestLine requestChar =
     -- Step 1: Read the source file at the provided URI
     File.readUtf8 uri
-        |> Task.bind
+        |> Task.andThen
             (\content ->
                 -- Step 2: Parse the source code to find the symbol at the given position
                 let
@@ -86,7 +86,7 @@ runHelp _ uri requestLine requestChar =
                 in
                 -- Step 3: Resolve the definition through canonicalization (found symbol location)
                 -- Step 4: Return the location of the definition
-                Task.pure result
+                Task.succeed result
             )
 
 

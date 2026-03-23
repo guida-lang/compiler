@@ -97,7 +97,6 @@ module Utils.Main exposing
     , maybeTraverseTask
     , newChan
     , nodeGetDirname
-    , nodeMathRandom
     , nonEmptyListTraverse
     , readChan
     , replCompleteWord
@@ -229,7 +228,7 @@ filterM p =
     List.foldr
         (\x acc ->
             Task.apply acc
-                (Task.fmap
+                (Task.map
                     (\flg ->
                         if flg then
                             (::) x
@@ -240,7 +239,7 @@ filterM p =
                     (p x)
                 )
         )
-        (Task.pure [])
+        (Task.succeed [])
 
 
 find : (k -> comparable) -> k -> Dict comparable k a -> a
@@ -384,9 +383,9 @@ mapM_ f =
     let
         c : a -> Task Never () -> Task Never ()
         c x k =
-            Task.bind (\_ -> k) (f x)
+            Task.andThen (\_ -> k) (f x)
     in
-    List.foldr c (Task.pure ())
+    List.foldr c (Task.succeed ())
 
 
 dictMapM_ : (k -> k -> Order) -> (a -> Task Never b) -> Dict c k a -> Task Never ()
@@ -394,9 +393,9 @@ dictMapM_ keyComparison f =
     let
         c : k -> a -> Task Never () -> Task Never ()
         c _ x k =
-            Task.bind (\_ -> k) (f x)
+            Task.andThen (\_ -> k) (f x)
     in
-    Map.foldl keyComparison c (Task.pure ())
+    Map.foldl keyComparison c (Task.succeed ())
 
 
 maybeMapM : (a -> Maybe b) -> List a -> Maybe (List b)
@@ -434,8 +433,8 @@ mapTraverse toComparable keyComparison f =
 mapTraverseWithKey : (k -> comparable) -> (k -> k -> Order) -> (k -> a -> Task Never b) -> Dict comparable k a -> Task Never (Dict comparable k b)
 mapTraverseWithKey toComparable keyComparison f =
     Map.foldl keyComparison
-        (\k a -> Task.bind (\c -> Task.fmap (\va -> Map.insert toComparable k va c) (f k a)))
-        (Task.pure Map.empty)
+        (\k a -> Task.andThen (\c -> Task.map (\va -> Map.insert toComparable k va c) (f k a)))
+        (Task.succeed Map.empty)
 
 
 mapTraverseResult : (k -> comparable) -> (k -> k -> Order) -> (a -> Result e b) -> Dict comparable k a -> Result e (Dict comparable k b)
@@ -463,25 +462,25 @@ listMaybeTraverse f =
 
 nonEmptyListTraverse : (a -> Task Never b) -> NE.Nonempty a -> Task Never (NE.Nonempty b)
 nonEmptyListTraverse f (NE.Nonempty x list) =
-    List.foldl (\a -> Task.bind (\c -> Task.fmap (\va -> NE.cons va c) (f a)))
-        (Task.fmap NE.singleton (f x))
+    List.foldl (\a -> Task.andThen (\c -> Task.map (\va -> NE.cons va c) (f a)))
+        (Task.map NE.singleton (f x))
         list
 
 
 listTraverse_ : (a -> Task Never b) -> List a -> Task Never ()
 listTraverse_ f =
     listTraverse f
-        >> Task.fmap (\_ -> ())
+        >> Task.map (\_ -> ())
 
 
 maybeTraverseTask : (a -> Task x b) -> Maybe a -> Task x (Maybe b)
 maybeTraverseTask f a =
     case Maybe.map f a of
         Just b ->
-            Task.fmap Just b
+            Task.map Just b
 
         Nothing ->
-            Task.pure Nothing
+            Task.succeed Nothing
 
 
 zipWithM : (a -> b -> Maybe c) -> List a -> List b -> Maybe (List c)
@@ -735,11 +734,11 @@ lockWithFileLock path mode ioFunc =
     case mode of
         LockExclusive ->
             lockFile path
-                |> Task.bind ioFunc
-                |> Task.bind
+                |> Task.andThen ioFunc
+                |> Task.andThen
                     (\a ->
                         unlockFile path
-                            |> Task.fmap (\_ -> a)
+                            |> Task.map (\_ -> a)
                     )
 
 
@@ -852,7 +851,7 @@ dirCanonicalizePath path =
 dirWithCurrentDirectory : FilePath -> Task Never a -> Task Never a
 dirWithCurrentDirectory dir action =
     dirGetCurrentDirectory
-        |> Task.bind
+        |> Task.andThen
             (\currentDir ->
                 bracket_
                     (Impure.task "dirWithCurrentDirectory"
@@ -891,7 +890,7 @@ envLookupEnv name =
 
 envGetProgName : Task Never String
 envGetProgName =
-    Task.pure "guida"
+    Task.succeed "guida"
 
 
 envGetArgs : Task Never (List String)
@@ -977,13 +976,13 @@ type AsyncException
 bracket : Task Never a -> (a -> Task Never b) -> (a -> Task Never c) -> Task Never c
 bracket before after thing =
     before
-        |> Task.bind
+        |> Task.andThen
             (\a ->
                 thing a
-                    |> Task.bind
+                    |> Task.andThen
                         (\r ->
                             after a
-                                |> Task.fmap (\_ -> r)
+                                |> Task.map (\_ -> r)
                         )
             )
 
@@ -1012,13 +1011,13 @@ type ChItem a
 newChan : Task Never (Chan a)
 newChan =
     MVar.newEmptyMVar
-        |> Task.bind
+        |> Task.andThen
             (\hole ->
                 MVar.newMVar hole
-                    |> Task.bind
+                    |> Task.andThen
                         (\readVar ->
                             MVar.newMVar hole
-                                |> Task.fmap
+                                |> Task.map
                                     (\writeVar ->
                                         Chan readVar writeVar
                                     )
@@ -1033,7 +1032,7 @@ readChan (Chan readVar _) =
             -- Use readMVar here, not takeMVar,
             -- else dupChan doesn't work
             MVar.readMVar read_end
-                |> Task.fmap
+                |> Task.map
                     (\(ChItem val new_read_end) ->
                         ( new_read_end, val )
                     )
@@ -1042,13 +1041,13 @@ readChan (Chan readVar _) =
 writeChan : Chan a -> a -> Task Never ()
 writeChan (Chan _ writeVar) val =
     MVar.newEmptyMVar
-        |> Task.bind
+        |> Task.andThen
             (\new_hole ->
                 MVar.takeMVar writeVar
-                    |> Task.bind
+                    |> Task.andThen
                         (\old_hole ->
                             MVar.putMVar old_hole (ChItem val new_hole)
-                                |> Task.bind (\_ -> MVar.putMVar writeVar new_hole)
+                                |> Task.andThen (\_ -> MVar.putMVar writeVar new_hole)
                         )
             )
 
@@ -1145,14 +1144,6 @@ nodeGetDirname =
         []
         Impure.EmptyBody
         (Impure.StringResolver identity)
-
-
-nodeMathRandom : Task Never Float
-nodeMathRandom =
-    Impure.task "nodeMathRandom"
-        []
-        Impure.EmptyBody
-        (Impure.DecoderResolver Decode.float)
 
 
 

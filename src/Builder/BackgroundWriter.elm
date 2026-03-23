@@ -24,16 +24,16 @@ type Scope
 withScope : (Scope -> Task Never a) -> Task Never a
 withScope callback =
     MVar.newMVar []
-        |> Task.bind
+        |> Task.andThen
             (\workList ->
                 callback (Scope workList)
-                    |> Task.bind
+                    |> Task.andThen
                         (\result ->
                             MVar.takeMVar workList
-                                |> Task.bind
+                                |> Task.andThen
                                     (\mvars ->
                                         Utils.listTraverse_ MVar.takeMVar mvars
-                                            |> Task.fmap (\_ -> result)
+                                            |> Task.map (\_ -> result)
                                     )
                         )
             )
@@ -42,16 +42,16 @@ withScope callback =
 writeBinary : (a -> BE.Encoder) -> Scope -> String -> a -> Task Never ()
 writeBinary toEncoder (Scope workList) path value =
     MVar.newEmptyMVar
-        |> Task.bind
+        |> Task.andThen
             (\mvar ->
                 Process.spawn
                     (File.writeBinary toEncoder path value
-                        |> Task.bind (\_ -> MVar.putMVar mvar ())
+                        |> Task.andThen (\_ -> MVar.putMVar mvar ())
                     )
-                    |> Task.bind
+                    |> Task.andThen
                         (\_ ->
                             MVar.takeMVar workList
-                                |> Task.bind
+                                |> Task.andThen
                                     (\oldWork ->
                                         let
                                             newWork : List (MVar ())

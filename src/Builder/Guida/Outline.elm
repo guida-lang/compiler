@@ -210,7 +210,7 @@ encodeSrcDir srcDir =
 read : Stuff.Root -> Task Never (Result Exit.Outline Outline)
 read root =
     File.readUtf8 (Stuff.rootProjectFilePath root)
-        |> Task.bind
+        |> Task.andThen
             (\bytes ->
                 let
                     decoder : Decoder Outline
@@ -226,15 +226,15 @@ read root =
                     Err err ->
                         case root of
                             Stuff.GuidaRoot _ ->
-                                Task.pure <| Err (Exit.OutlineHasBadGuidaStructure err)
+                                Task.succeed <| Err (Exit.OutlineHasBadGuidaStructure err)
 
                             Stuff.ElmRoot _ _ ->
-                                Task.pure <| Err (Exit.OutlineHasBadElmStructure err)
+                                Task.succeed <| Err (Exit.OutlineHasBadElmStructure err)
 
                     Ok outline ->
                         case outline of
                             Pkg (GuidaPkgOutline pkg _ _ _ _ deps _ _) ->
-                                Task.pure <|
+                                Task.succeed <|
                                     if not (Dict.member identity Pkg.stdlib deps) && pkg /= Pkg.stdlib then
                                         Err Exit.OutlineNoGuidaPkgStdlib
 
@@ -242,7 +242,7 @@ read root =
                                         Ok outline
 
                             Pkg (ElmPkgOutline pkg _ _ _ _ deps _ _) ->
-                                Task.pure <|
+                                Task.succeed <|
                                     if not (Dict.member identity Pkg.core deps) && pkg /= Pkg.core then
                                         Err Exit.OutlineNoElmPkgCore
 
@@ -251,54 +251,54 @@ read root =
 
                             App (GuidaAppOutline _ srcDirs direct _ _ _) ->
                                 if not (Dict.member identity Pkg.stdlib direct) then
-                                    Task.pure <| Err Exit.OutlineNoGuidaAppStdlib
+                                    Task.succeed <| Err Exit.OutlineNoGuidaAppStdlib
 
                                 else
                                     Utils.filterM (isSrcDirMissing root) (NE.toList srcDirs)
-                                        |> Task.bind
+                                        |> Task.andThen
                                             (\badDirs ->
                                                 case List.map toGiven badDirs of
                                                     d :: ds ->
-                                                        Task.pure <| Err (Exit.OutlineHasMissingGuidaSrcDirs d ds)
+                                                        Task.succeed <| Err (Exit.OutlineHasMissingGuidaSrcDirs d ds)
 
                                                     [] ->
                                                         detectDuplicates (Stuff.rootPath root) (NE.toList srcDirs)
-                                                            |> Task.bind
+                                                            |> Task.andThen
                                                                 (\maybeDups ->
                                                                     case maybeDups of
                                                                         Nothing ->
-                                                                            Task.pure <| Ok outline
+                                                                            Task.succeed <| Ok outline
 
                                                                         Just ( canonicalDir, ( dir1, dir2 ) ) ->
-                                                                            Task.pure <| Err (Exit.OutlineHasDuplicateGuidaSrcDirs canonicalDir dir1 dir2)
+                                                                            Task.succeed <| Err (Exit.OutlineHasDuplicateGuidaSrcDirs canonicalDir dir1 dir2)
                                                                 )
                                             )
 
                             App (ElmAppOutline _ srcDirs direct indirect _ _) ->
                                 if not (Dict.member identity Pkg.core direct) then
-                                    Task.pure <| Err Exit.OutlineNoElmAppCore
+                                    Task.succeed <| Err Exit.OutlineNoElmAppCore
 
                                 else if not (Dict.member identity Pkg.json direct) && not (Dict.member identity Pkg.json indirect) then
-                                    Task.pure <| Err Exit.OutlineNoElmAppJson
+                                    Task.succeed <| Err Exit.OutlineNoElmAppJson
 
                                 else
                                     Utils.filterM (isSrcDirMissing root) (NE.toList srcDirs)
-                                        |> Task.bind
+                                        |> Task.andThen
                                             (\badDirs ->
                                                 case List.map toGiven badDirs of
                                                     d :: ds ->
-                                                        Task.pure <| Err (Exit.OutlineHasMissingElmSrcDirs d ds)
+                                                        Task.succeed <| Err (Exit.OutlineHasMissingElmSrcDirs d ds)
 
                                                     [] ->
                                                         detectDuplicates (Stuff.rootPath root) (NE.toList srcDirs)
-                                                            |> Task.bind
+                                                            |> Task.andThen
                                                                 (\maybeDups ->
                                                                     case maybeDups of
                                                                         Nothing ->
-                                                                            Task.pure <| Ok outline
+                                                                            Task.succeed <| Ok outline
 
                                                                         Just ( canonicalDir, ( dir1, dir2 ) ) ->
-                                                                            Task.pure <| Err (Exit.OutlineHasDuplicateElmSrcDirs canonicalDir dir1 dir2)
+                                                                            Task.succeed <| Err (Exit.OutlineHasDuplicateElmSrcDirs canonicalDir dir1 dir2)
                                                                 )
                                             )
             )
@@ -306,7 +306,7 @@ read root =
 
 isSrcDirMissing : Stuff.Root -> SrcDir -> Task Never Bool
 isSrcDirMissing root srcDir =
-    Task.fmap not (Utils.dirDoesDirectoryExist (toAbsolute (Stuff.rootPath root) srcDir))
+    Task.map not (Utils.dirDoesDirectoryExist (toAbsolute (Stuff.rootPath root) srcDir))
 
 
 toGiven : SrcDir -> FilePath
@@ -332,7 +332,7 @@ toAbsolute root srcDir =
 detectDuplicates : FilePath -> List SrcDir -> Task Never (Maybe ( FilePath, ( FilePath, FilePath ) ))
 detectDuplicates root srcDirs =
     Utils.listTraverse (toPair root) srcDirs
-        |> Task.fmap
+        |> Task.map
             (\pairs ->
                 Utils.mapLookupMin <|
                     Utils.mapMapMaybe identity compare isDup <|
@@ -343,9 +343,9 @@ detectDuplicates root srcDirs =
 toPair : FilePath -> SrcDir -> Task Never ( FilePath, OneOrMore.OneOrMore FilePath )
 toPair root srcDir =
     Utils.dirCanonicalizePath (toAbsolute root srcDir)
-        |> Task.bind
+        |> Task.andThen
             (\key ->
-                Task.pure ( key, OneOrMore.one (toGiven srcDir) )
+                Task.succeed ( key, OneOrMore.one (toGiven srcDir) )
             )
 
 
@@ -366,11 +366,11 @@ isDup paths =
 getAllModulePaths : Stuff.Root -> Task Never (Dict (List String) TypeCheck.Canonical FilePath)
 getAllModulePaths root =
     read root
-        |> Task.bind
+        |> Task.andThen
             (\outlineResult ->
                 case outlineResult of
                     Err _ ->
-                        Task.pure Dict.empty
+                        Task.succeed Dict.empty
 
                     Ok outline ->
                         let
@@ -414,13 +414,13 @@ getAllModulePaths root =
 getAllModulePathsHelper : Pkg.Name -> List FilePath -> Dict ( String, String ) Pkg.Name V.Version -> Task Never (Dict (List String) TypeCheck.Canonical FilePath)
 getAllModulePathsHelper packageName packageSrcDirs deps =
     Utils.listTraverse recursiveFindFiles packageSrcDirs
-        |> Task.bind
+        |> Task.andThen
             (\files ->
                 Utils.mapTraverseWithKey identity compare resolvePackagePaths deps
-                    |> Task.bind
+                    |> Task.andThen
                         (\dependencyRoots ->
                             Utils.mapTraverse identity compare (\( pkgName, pkgRoot ) -> getAllModulePathsHelper pkgName [ pkgRoot ++ "/src" ] Dict.empty) dependencyRoots
-                                |> Task.fmap
+                                |> Task.map
                                     (\dependencyMaps ->
                                         let
                                             asMap : Dict (List String) TypeCheck.Canonical FilePath
@@ -438,13 +438,13 @@ getAllModulePathsHelper packageName packageSrcDirs deps =
 recursiveFindFiles : FilePath -> Task Never (List ( FilePath, FilePath ))
 recursiveFindFiles root =
     recursiveFindFilesHelp root
-        |> Task.fmap (List.map (Tuple.pair root))
+        |> Task.map (List.map (Tuple.pair root))
 
 
 recursiveFindFilesHelp : FilePath -> Task Never (List FilePath)
 recursiveFindFilesHelp root =
     Utils.dirListDirectory root
-        |> Task.bind
+        |> Task.andThen
             (\dirContents ->
                 let
                     ( elmFiles, ( guidaFiles, others ) ) =
@@ -452,10 +452,10 @@ recursiveFindFilesHelp root =
                             |> Tuple.mapSecond (List.partition (hasExtension ".guida"))
                 in
                 Utils.filterM (\fp -> Utils.dirDoesDirectoryExist (root ++ "/" ++ fp)) others
-                    |> Task.bind
+                    |> Task.andThen
                         (\subDirectories ->
                             Utils.listTraverse (\subDirectory -> recursiveFindFilesHelp (root ++ "/" ++ subDirectory)) subDirectories
-                                |> Task.fmap
+                                |> Task.map
                                     (\filesFromSubDirs ->
                                         List.concat filesFromSubDirs ++ List.map (\fp -> root ++ "/" ++ fp) (elmFiles ++ guidaFiles)
                                     )
@@ -479,7 +479,7 @@ moduleNameFromFilePath root filePath =
 resolvePackagePaths : Pkg.Name -> V.Version -> Task Never ( Pkg.Name, FilePath )
 resolvePackagePaths pkgName vsn =
     Stuff.getPackageCache
-        |> Task.fmap (\packageCache -> ( pkgName, Stuff.package packageCache pkgName vsn ))
+        |> Task.map (\packageCache -> ( pkgName, Stuff.package packageCache pkgName vsn ))
 
 
 

@@ -36,8 +36,8 @@ type Artifacts
 
 compile : Target -> Stuff.Root -> Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Task Never (Result E.Error Artifacts)
 compile target root pkg ifaces modul =
-    Task.pure (canonicalize target root pkg ifaces modul)
-        |> Task.fmap
+    Task.succeed (canonicalize target root pkg ifaces modul)
+        |> Task.map
             (\canonicalResult ->
                 case canonicalResult of
                     Ok canonical ->
