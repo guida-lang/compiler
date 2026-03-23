@@ -121,6 +121,7 @@ runHelp root testFileGlobs flags =
                                                                 Outline.Pkg (Outline.GuidaPkgOutline _ _ _ _ _ deps test _) ->
                                                                     Outline.GuidaAppOutline V.compiler (newSrcDirs (NE.singleton (Outline.RelativeSrcDir "src"))) Dict.empty Dict.empty Dict.empty Dict.empty
                                                                         |> makePkgPlan env (Dict.union deps test)
+                                                                        |> Task.bind (makeAppPlan env Pkg.stdlib)
                                                                         -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
                                                                         |> Task.bind (attemptChanges root env)
 
