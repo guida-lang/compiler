@@ -63,11 +63,7 @@ generate target mode parentModule expression =
         Opt.Float (A.Region start _) float ->
             JsExpr <|
                 JS.ExprTrackedFloat parentModule start <|
-                    if float == toFloat (floor float) then
-                        String.fromFloat float ++ ".0"
-
-                    else
-                        String.fromFloat float
+                    float
 
         Opt.VarLocal name ->
             JsExpr <| JS.ExprRef (JsName.fromLocal name)

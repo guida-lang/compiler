@@ -2034,7 +2034,7 @@ formatExpression importInfo (A.At region aexpr) =
         Src.Int _ src ->
             ( SyntaxSeparated, formatLiteral (IntNum src) )
 
-        Src.Float _ src ->
+        Src.Float src ->
             ( SyntaxSeparated, formatLiteral (FloatNum src) )
 
         Src.Var Src.LowVar name ->
