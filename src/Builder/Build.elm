@@ -50,6 +50,7 @@ import Data.Graph as Graph
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
 import Process
+import System.Directory as Dir
 import System.TypeCheck.IO as TypeCheck
 import Task exposing (Task)
 import Utils.Crash exposing (crash)
@@ -88,7 +89,7 @@ type AbsoluteSrcDir
 toAbsoluteSrcDir : FilePath -> Outline.SrcDir -> Task Never AbsoluteSrcDir
 toAbsoluteSrcDir root srcDir =
     Task.map AbsoluteSrcDir
-        (Utils.dirCanonicalizePath
+        (Dir.canonicalizePath
             (case srcDir of
                 Outline.AbsoluteSrcDir dir ->
                     dir
@@ -1495,7 +1496,7 @@ getRootInfo env path =
         |> Task.andThen
             (\exists ->
                 if exists then
-                    Task.andThen (getRootInfoHelp env path) (Utils.dirCanonicalizePath path)
+                    Task.andThen (getRootInfoHelp env path) (Dir.canonicalizePath path)
 
                 else
                     Task.succeed (Err (Exit.BP_PathUnknown path))

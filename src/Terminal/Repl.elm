@@ -42,6 +42,7 @@ import Data.Map as Map exposing (Dict)
 import Dict
 import List.Extra as List
 import Maybe.Extra as Maybe
+import System.Directory as Dir
 import System.Exit as Exit
 import System.IO as IO
 import System.Process as Process
@@ -729,7 +730,7 @@ getRoot =
                                         root =
                                             Stuff.GuidaRoot (cache ++ "/tmp")
                                     in
-                                    Utils.dirCreateDirectoryIfMissing True (Stuff.rootPath root ++ "/src")
+                                    Dir.createDirectoryIfMissing True (Stuff.rootPath root ++ "/src")
                                         |> Task.andThen
                                             (\_ ->
                                                 Outline.write root <|
@@ -764,14 +765,14 @@ getInterpreter : Maybe String -> Task Never FilePath
 getInterpreter maybeName =
     case maybeName of
         Just name ->
-            getInterpreterHelp name (Utils.dirFindExecutable name)
+            getInterpreterHelp name (Dir.findExecutable name)
 
         Nothing ->
             getInterpreterHelp "node` or `nodejs" <|
-                (Utils.dirFindExecutable "node"
+                (Dir.findExecutable "node"
                     |> Task.andThen
                         (\exe1 ->
-                            Utils.dirFindExecutable "nodejs"
+                            Dir.findExecutable "nodejs"
                                 |> Task.map (\exe2 -> Maybe.or exe1 exe2)
                         )
                 )

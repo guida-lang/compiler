@@ -30,6 +30,7 @@ import Compiler.Json.Decode as D
 import Control.Concurrent.MVar as MVar
 import Data.Map as Dict exposing (Dict)
 import Process
+import System.Directory as Dir
 import Task exposing (Task)
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
@@ -712,7 +713,7 @@ getConstraints pkg vsn =
                                                                 Task.succeed (ISOk (toNewState cs) cs)
 
                                                             Offline ->
-                                                                Utils.dirDoesDirectoryExist (Stuff.package cache pkg vsn ++ "/src")
+                                                                Dir.doesDirectoryExist (Stuff.package cache pkg vsn ++ "/src")
                                                                     |> Task.map
                                                                         (\srcExists ->
                                                                             if srcExists then
@@ -747,7 +748,7 @@ getConstraints pkg vsn =
                                                                                 Task.succeed (ISOk (toNewState cs) cs)
 
                                                                             Offline ->
-                                                                                Utils.dirDoesDirectoryExist (Stuff.package cache pkg vsn ++ "/src")
+                                                                                Dir.doesDirectoryExist (Stuff.package cache pkg vsn ++ "/src")
                                                                                     |> Task.map
                                                                                         (\srcExists ->
                                                                                             if srcExists then
@@ -781,7 +782,7 @@ getConstraints pkg vsn =
                                                                                         Ok guidaBody ->
                                                                                             case D.fromByteString constraintsDecoder guidaBody of
                                                                                                 Ok cs ->
-                                                                                                    Utils.dirCreateDirectoryIfMissing True home
+                                                                                                    Dir.createDirectoryIfMissing True home
                                                                                                         |> Task.andThen (\_ -> File.writeUtf8 guidaPath guidaBody)
                                                                                                         |> Task.map (\_ -> ISOk (toNewState cs) cs)
 
@@ -799,7 +800,7 @@ getConstraints pkg vsn =
                                                                                                                                 Ok elmBody ->
                                                                                                                                     case D.fromByteString constraintsDecoder elmBody of
                                                                                                                                         Ok cs ->
-                                                                                                                                            Utils.dirCreateDirectoryIfMissing True home
+                                                                                                                                            Dir.createDirectoryIfMissing True home
                                                                                                                                                 |> Task.andThen (\_ -> File.writeUtf8 elmPath elmBody)
                                                                                                                                                 |> Task.map (\_ -> ISOk (toNewState cs) cs)
 

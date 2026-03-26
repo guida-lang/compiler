@@ -24,6 +24,7 @@ import Compiler.Data.NonEmptyList as NE
 import Compiler.Generate.Html as Html
 import Compiler.Guida.ModuleName as ModuleName
 import Maybe.Extra as Maybe
+import System.Directory as Dir
 import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (Parser(..))
 import Utils.Main as Utils exposing (FilePath)
@@ -304,7 +305,7 @@ getNoMain modules root =
 generate : Reporting.Style -> FilePath -> String -> NE.Nonempty ModuleName.Raw -> Task Exit.Make ()
 generate style target builder names =
     Task.io
-        (Utils.dirCreateDirectoryIfMissing True (Utils.fpTakeDirectory target)
+        (Dir.createDirectoryIfMissing True (Utils.fpTakeDirectory target)
             |> Task.andThen (\_ -> File.writeUtf8 target builder)
             |> Task.andThen (\_ -> Reporting.reportGenerate style names target)
         )

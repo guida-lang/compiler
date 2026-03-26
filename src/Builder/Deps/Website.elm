@@ -7,6 +7,7 @@ module Builder.Deps.Website exposing
 import Builder.Http as Http
 import Compiler.Guida.Package as Pkg
 import Compiler.Guida.Version as V
+import System.Environment as Env
 import Task exposing (Task)
 import Utils.Main as Utils
 import Utils.Task.Extra as Task
@@ -14,7 +15,7 @@ import Utils.Task.Extra as Task
 
 domain : Task Never String
 domain =
-    Utils.envLookupEnv "GUIDA_REGISTRY"
+    Env.lookupEnv "GUIDA_REGISTRY"
         |> Task.map (Maybe.withDefault "https://package.guida-lang.org")
 
 

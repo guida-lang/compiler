@@ -24,6 +24,7 @@ import Compiler.Guida.Version as V exposing (Version)
 import Compiler.Json.Decode as D
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet
+import System.Directory as Dir
 import Task exposing (Task)
 import Utils.Main as Utils
 import Utils.Task.Extra as Task
@@ -430,7 +431,7 @@ getDocs cache manager name version =
                                     \body ->
                                         case D.fromByteString Docs.decoder body of
                                             Ok docs ->
-                                                Utils.dirCreateDirectoryIfMissing True home
+                                                Dir.createDirectoryIfMissing True home
                                                     |> Task.andThen (\_ -> File.writeUtf8 path body)
                                                     |> Task.map (\_ -> Ok docs)
 

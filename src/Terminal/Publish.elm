@@ -23,6 +23,7 @@ import Compiler.Json.Decode as D
 import Compiler.Json.String as Json
 import Compiler.Reporting.Doc as D
 import List.Extra as List
+import System.Directory as Dir
 import System.Exit as Exit
 import System.IO as IO
 import System.Process as Process
@@ -320,7 +321,7 @@ type Git
 
 getGit : Task Exit.Publish Git
 getGit =
-    Task.io (Utils.dirFindExecutable "git")
+    Task.io (Dir.findExecutable "git")
         |> Task.andThen
             (\maybeGit ->
                 case maybeGit of
@@ -441,7 +442,7 @@ verifyZip (Env root _ manager _ _) pkg vsn =
                             |> Task.andThen
                                 (\_ ->
                                     reportZipBuildCheck <|
-                                        Utils.dirWithCurrentDirectory (Stuff.rootPath prepublishDir) <|
+                                        Dir.withCurrentDirectory (Stuff.rootPath prepublishDir) <|
                                             verifyZipBuild prepublishDir
                                 )
                             |> Task.map (\_ -> sha)
@@ -462,8 +463,8 @@ withPrepublishDir root callback =
     in
     Task.eio identity <|
         Utils.bracket_
-            (Utils.dirCreateDirectoryIfMissing True (Stuff.rootPath dir))
-            (Utils.dirRemoveDirectoryRecursive (Stuff.rootPath dir))
+            (Dir.createDirectoryIfMissing True (Stuff.rootPath dir))
+            (Dir.removeDirectoryRecursive (Stuff.rootPath dir))
             (Task.run (callback dir))
 
 

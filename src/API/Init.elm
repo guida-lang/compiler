@@ -33,7 +33,7 @@ type Flags
 
 run : Flags -> Task Never (Result Exit.Init ())
 run (Flags package) =
-    Utils.dirDoesFileExist "guida.json"
+    Dir.doesFileExist "guida.json"
         |> Task.andThen
             (\exists ->
                 if exists then
@@ -62,8 +62,8 @@ init package =
                             \details ->
                                 verify cache connection registry testDefaults <|
                                     \testDetails ->
-                                        Utils.dirCreateDirectoryIfMissing True "src"
-                                            |> Task.andThen (\_ -> Utils.dirCreateDirectoryIfMissing True "tests")
+                                        Dir.createDirectoryIfMissing True "src"
+                                            |> Task.andThen (\_ -> Dir.createDirectoryIfMissing True "tests")
                                             |> Task.andThen (\_ -> File.writeUtf8 "tests/Example.guida" testExample)
                                             |> Task.andThen
                                                 (\_ ->

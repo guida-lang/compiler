@@ -50,6 +50,7 @@ import Control.Concurrent.MVar as MVar exposing (MVar)
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Process
+import System.Directory as Dir
 import System.TypeCheck.IO as TypeCheck
 import Task exposing (Task)
 import Utils.Bytes.Decode as BD
@@ -653,7 +654,7 @@ verifyDep ((Env key _ root cache manager _ _) as env) depsMVar solution pkg ((So
         fingerprint =
             Utils.mapIntersectionWith identity Pkg.compareName (\(Solver.Details v _) _ -> v) solution directDeps
     in
-    Utils.dirDoesDirectoryExist (Stuff.package cache pkg vsn ++ "/src")
+    Dir.doesDirectoryExist (Stuff.package cache pkg vsn ++ "/src")
         |> Task.andThen
             (\exists ->
                 if exists then

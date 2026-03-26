@@ -8,6 +8,7 @@ module Terminal.Terminal.Error exposing
 import Compiler.Reporting.Suggest as Suggest
 import List.Extra as List
 import Prelude
+import System.Environment as Env
 import System.Exit as Exit
 import System.IO as IO
 import Task exposing (Task)
@@ -72,7 +73,7 @@ exitWith code docs =
 
 getExeName : Task Never String
 getExeName =
-    Task.map Utils.fpTakeFileName Utils.envGetProgName
+    Task.map Utils.fpTakeFileName Env.getProgName
 
 
 stack : List P.Doc -> P.Doc

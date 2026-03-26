@@ -32,6 +32,7 @@ import Compiler.Json.Decode as D
 import Compiler.Json.Encode as E
 import Compiler.Parse.Primitives as P
 import Data.Map as Dict exposing (Dict)
+import System.Directory as Dir
 import System.TypeCheck.IO as TypeCheck
 import Task exposing (Task)
 import Utils.Bytes.Decode as BD
@@ -306,7 +307,7 @@ read root =
 
 isSrcDirMissing : Stuff.Root -> SrcDir -> Task Never Bool
 isSrcDirMissing root srcDir =
-    Task.map not (Utils.dirDoesDirectoryExist (toAbsolute (Stuff.rootPath root) srcDir))
+    Task.map not (Dir.doesDirectoryExist (toAbsolute (Stuff.rootPath root) srcDir))
 
 
 toGiven : SrcDir -> FilePath
@@ -342,7 +343,7 @@ detectDuplicates root srcDirs =
 
 toPair : FilePath -> SrcDir -> Task Never ( FilePath, OneOrMore.OneOrMore FilePath )
 toPair root srcDir =
-    Utils.dirCanonicalizePath (toAbsolute root srcDir)
+    Dir.canonicalizePath (toAbsolute root srcDir)
         |> Task.andThen
             (\key ->
                 Task.succeed ( key, OneOrMore.one (toGiven srcDir) )
@@ -443,7 +444,7 @@ recursiveFindFiles root =
 
 recursiveFindFilesHelp : FilePath -> Task Never (List FilePath)
 recursiveFindFilesHelp root =
-    Utils.dirListDirectory root
+    Dir.listDirectory root
         |> Task.andThen
             (\dirContents ->
                 let
@@ -451,7 +452,7 @@ recursiveFindFilesHelp root =
                         List.partition (hasExtension ".elm") dirContents
                             |> Tuple.mapSecond (List.partition (hasExtension ".guida"))
                 in
-                Utils.filterM (\fp -> Utils.dirDoesDirectoryExist (root ++ "/" ++ fp)) others
+                Utils.filterM (\fp -> Dir.doesDirectoryExist (root ++ "/" ++ fp)) others
                     |> Task.andThen
                         (\subDirectories ->
                             Utils.listTraverse (\subDirectory -> recursiveFindFilesHelp (root ++ "/" ++ subDirectory)) subDirectories

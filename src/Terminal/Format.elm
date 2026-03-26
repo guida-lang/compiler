@@ -12,6 +12,7 @@ import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Error.Syntax as E
 import Json.Encode as Encode
 import Result.Extra as Result
+import System.Directory as Dir
 import System.Exit as Exit
 import System.IO as IO
 import Task exposing (Task)
@@ -332,10 +333,10 @@ readUtf8FileWithPath filePath =
 
 stat : FilePath -> Task Never FileType
 stat path =
-    Utils.dirDoesFileExist path
+    Dir.doesFileExist path
         |> Task.andThen
             (\isFile ->
-                Utils.dirDoesDirectoryExist path
+                Dir.doesDirectoryExist path
                     |> Task.map
                         (\isDirectory ->
                             case ( isFile, isDirectory ) of
@@ -684,7 +685,7 @@ collectFiles children root =
 
 listDir : FilePath -> Task Never (List FilePath)
 listDir path =
-    Utils.dirListDirectory path
+    Dir.listDirectory path
         |> Task.map (List.map (\file -> path ++ "/" ++ file))
 
 
@@ -697,7 +698,7 @@ fileList =
                 Task.succeed []
 
             else
-                Utils.dirDoesDirectoryExist path
+                Dir.doesDirectoryExist path
                     |> Task.andThen
                         (\directory ->
                             if directory then

@@ -15,7 +15,7 @@
             "elm-community/result-extra": "2.4.0",
             "guida-lang/glsl": "1.0.0",
             "guida-lang/graph": "1.0.1",
-            "guida-lang/stdlib": "2.0.1",
+            "guida-lang/stdlib": "1.0.1",
             "jxxcarlson/hex": "4.0.1",
             "obiloud/numeric-decimal": "3.0.1",
             "rtfeldman/elm-hex": "1.0.0",

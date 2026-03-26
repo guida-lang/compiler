@@ -16,6 +16,7 @@ module Terminal.Terminal exposing
 
 import Compiler.Reporting.Doc as D
 import List.Extra as List
+import System.Environment as Env
 import System.Exit as Exit
 import System.IO as IO
 import Task exposing (Task)
@@ -31,7 +32,7 @@ import Utils.Task.Extra as Task
 
 app : D.Doc -> D.Doc -> List Command -> Task Never ()
 app intro outro commands =
-    Utils.envGetArgs
+    Env.getArgs
         |> Task.andThen
             (\argStrings ->
                 case argStrings of

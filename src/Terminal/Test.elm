@@ -32,6 +32,7 @@ import Json.Encode as Encode
 import Maybe.Extra as Maybe
 import Random
 import Regex exposing (Regex)
+import System.Directory as Dir
 import System.Exit as Exit
 import System.IO as IO
 import System.Process as Process
@@ -73,15 +74,15 @@ runHelp : Stuff.Root -> List String -> Flags -> Task Never (Result Exit.Test ())
 runHelp root testFileGlobs flags =
     Stuff.withRootLock (Stuff.rootPath root) <|
         Task.run <|
-            (Utils.dirCreateDirectoryIfMissing True (Stuff.testDir (Stuff.rootPath root))
-                |> Task.andThen (\_ -> Utils.nodeGetDirname)
+            (Dir.createDirectoryIfMissing True (Stuff.testDir (Stuff.rootPath root))
+                |> Task.andThen (\_ -> Dir.getDirname)
                 |> Task.io
                 |> Task.andThen
                     (\nodeDirname ->
                         Task.eio Exit.TestBadOutline (Outline.read root)
                             |> Task.andThen
                                 (\baseOutline ->
-                                    Task.io (Utils.dirDoesDirectoryExist "tests")
+                                    Task.io (Dir.doesDirectoryExist "tests")
                                         |> Task.andThen
                                             (\testsDirExists ->
                                                 Task.eio Exit.TestBadRegistry Solver.initEnv
@@ -190,7 +191,7 @@ runHelp root testFileGlobs flags =
                                         |> Task.map (List.filterMap identity)
                                         |> Task.andThen
                                             (\exposedList ->
-                                                Utils.dirCreateDirectoryIfMissing True (Stuff.testDir (Stuff.rootPath root) ++ "/src/Test/Generated")
+                                                Dir.createDirectoryIfMissing True (Stuff.testDir (Stuff.rootPath root) ++ "/src/Test/Generated")
                                                     |> Task.andThen
                                                         (\_ ->
                                                             let
@@ -211,7 +212,7 @@ runHelp root testFileGlobs flags =
                                                     |> Task.andThen
                                                         (\terminalStyle ->
                                                             Reporting.attemptWithStyle terminalStyle Exit.testToReport <|
-                                                                Utils.dirWithCurrentDirectory (Stuff.testDir (Stuff.rootPath root))
+                                                                Dir.withCurrentDirectory (Stuff.testDir (Stuff.rootPath root))
                                                                     (runMake (Stuff.rootMap Stuff.testDir root) "src/Test/Generated/Main.elm")
                                                         )
                                                     |> Task.andThen
@@ -849,10 +850,10 @@ type FileType
 
 stat : FilePath -> Task Never FileType
 stat path =
-    Utils.dirDoesFileExist path
+    Dir.doesFileExist path
         |> Task.andThen
             (\isFile ->
-                Utils.dirDoesDirectoryExist path
+                Dir.doesDirectoryExist path
                     |> Task.map
                         (\isDirectory ->
                             case ( isFile, isDirectory ) of
@@ -951,7 +952,7 @@ collectFiles children root =
 
 listDir : FilePath -> Task Never (List FilePath)
 listDir path =
-    Utils.dirListDirectory path
+    Dir.listDirectory path
         |> Task.map (List.map (\file -> path ++ "/" ++ file))
 
 
@@ -964,7 +965,7 @@ fileList =
                 Task.succeed []
 
             else
-                Utils.dirDoesDirectoryExist path
+                Dir.doesDirectoryExist path
                     |> Task.andThen
                         (\directory ->
                             if directory then
@@ -1213,10 +1214,10 @@ makePkgPlanHelp ((Solver.Env cache _ connection registry) as env) cons outline =
 getInterpreter : Task Never FilePath
 getInterpreter =
     getInterpreterHelp "node` or `nodejs" <|
-        (Utils.dirFindExecutable "node"
+        (Dir.findExecutable "node"
             |> Task.andThen
                 (\exe1 ->
-                    Utils.dirFindExecutable "nodejs"
+                    Dir.findExecutable "nodejs"
                         |> Task.map (\exe2 -> Maybe.or exe1 exe2)
                 )
         )

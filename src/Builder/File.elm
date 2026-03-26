@@ -15,6 +15,7 @@ module Builder.File exposing
     )
 
 import Codec.Archive.Zip as Zip
+import System.Directory as Dir
 import System.IO as IO
 import Task exposing (Task)
 import Time
@@ -35,7 +36,7 @@ type Time
 
 getTime : FilePath -> Task Never Time
 getTime path =
-    Task.map Time (Utils.dirGetModificationTime path)
+    Task.map Time (Dir.getModificationTime path)
 
 
 zeroTime : Time
@@ -54,13 +55,13 @@ writeBinary toEncoder path value =
         dir =
             Utils.fpDropFileName path
     in
-    Utils.dirCreateDirectoryIfMissing True dir
+    Dir.createDirectoryIfMissing True dir
         |> Task.andThen (\_ -> Utils.binaryEncodeFile toEncoder path value)
 
 
 readBinary : BD.Decoder a -> FilePath -> Task Never (Maybe a)
 readBinary decoder path =
-    Utils.dirDoesFileExist path
+    Dir.doesFileExist path
         |> Task.andThen
             (\pathExists ->
                 if pathExists then
@@ -149,7 +150,7 @@ writeEntry destination root entry =
             || (path == "elm.json")
     then
         if not (String.isEmpty path) && String.endsWith "/" path then
-            Utils.dirCreateDirectoryIfMissing True (Utils.fpCombine destination path)
+            Dir.createDirectoryIfMissing True (Utils.fpCombine destination path)
 
         else
             writeUtf8 (Utils.fpCombine destination path) (Zip.fromEntry entry)
@@ -164,7 +165,7 @@ writeEntry destination root entry =
 
 exists : FilePath -> Task Never Bool
 exists path =
-    Utils.dirDoesFileExist path
+    Dir.doesFileExist path
 
 
 
@@ -173,11 +174,11 @@ exists path =
 
 remove : FilePath -> Task Never ()
 remove path =
-    Utils.dirDoesFileExist path
+    Dir.doesFileExist path
         |> Task.andThen
             (\exists_ ->
                 if exists_ then
-                    Utils.dirRemoveFile path
+                    Dir.removeFile path
 
                 else
                     Task.succeed ()

@@ -33,6 +33,8 @@ import Compiler.Guida.ModuleName as ModuleName
 import Compiler.Guida.Package as Pkg
 import Compiler.Guida.Version as V
 import Prelude
+import System.Directory as Dir
+import System.Environment as Env
 import Task exposing (Task)
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
@@ -178,7 +180,7 @@ rootMap f root =
 
 findRoot : Task Never (Maybe Root)
 findRoot =
-    Utils.dirGetCurrentDirectory
+    Dir.getCurrentDirectory
         |> Task.andThen
             (\dir ->
                 findRootHelp (Utils.fpSplitDirectories dir)
@@ -192,14 +194,14 @@ findRootHelp dirs =
             Task.succeed Nothing
 
         _ :: _ ->
-            Utils.dirDoesFileExist (Utils.fpJoinPath dirs ++ "/guida.json")
+            Dir.doesFileExist (Utils.fpJoinPath dirs ++ "/guida.json")
                 |> Task.andThen
                     (\guidaExists ->
                         if guidaExists then
                             Task.succeed (Just (GuidaRoot (Utils.fpJoinPath dirs)))
 
                         else
-                            Utils.dirDoesFileExist (Utils.fpJoinPath dirs ++ "/elm.json")
+                            Dir.doesFileExist (Utils.fpJoinPath dirs ++ "/elm.json")
                                 |> Task.andThen
                                     (\elmExists ->
                                         if elmExists then
@@ -227,7 +229,7 @@ withRootLock root work =
         dir =
             stuff root
     in
-    Utils.dirCreateDirectoryIfMissing True dir
+    Dir.createDirectoryIfMissing True dir
         |> Task.andThen
             (\_ ->
                 Utils.lockWithFileLock (dir ++ "/lock") Utils.LockExclusive (\_ -> work)
@@ -281,14 +283,14 @@ getCacheDir projectName =
                     root =
                         Utils.fpCombine home (Utils.fpCombine compilerVersion projectName)
                 in
-                Utils.dirCreateDirectoryIfMissing True root
+                Dir.createDirectoryIfMissing True root
                     |> Task.map (\_ -> root)
             )
 
 
 getGuidaHome : Task Never String
 getGuidaHome =
-    Utils.envLookupEnv "GUIDA_HOME"
+    Env.lookupEnv "GUIDA_HOME"
         |> Task.andThen
             (\maybeCustomHome ->
                 case maybeCustomHome of
@@ -296,7 +298,7 @@ getGuidaHome =
                         Task.succeed customHome
 
                     Nothing ->
-                        Utils.dirGetAppUserDataDirectory "guida"
+                        Dir.getAppUserDataDirectory "guida"
             )
 
 

@@ -20,22 +20,7 @@ module Utils.Main exposing
     , bracket_
     , builderHPutBuilder
     , dictMapM_
-    , dirCanonicalizePath
-    , dirCreateDirectoryIfMissing
-    , dirDoesDirectoryExist
-    , dirDoesFileExist
-    , dirFindExecutable
-    , dirGetAppUserDataDirectory
-    , dirGetCurrentDirectory
-    , dirGetModificationTime
-    , dirListDirectory
-    , dirRemoveDirectoryRecursive
-    , dirRemoveFile
-    , dirWithCurrentDirectory
     , eitherLefts
-    , envGetArgs
-    , envGetProgName
-    , envLookupEnv
     , filterM
     , find
     , findMax
@@ -96,7 +81,6 @@ module Utils.Main exposing
     , maybeMapM
     , maybeTraverseTask
     , newChan
-    , nodeGetDirname
     , nonEmptyListTraverse
     , readChan
     , replCompleteWord
@@ -759,149 +743,6 @@ unlockFile path =
 
 
 
--- System.Directory
-
-
-dirDoesFileExist : FilePath -> Task Never Bool
-dirDoesFileExist filename =
-    Impure.task "dirDoesFileExist"
-        []
-        (Impure.StringBody filename)
-        (Impure.DecoderResolver Decode.bool)
-
-
-dirFindExecutable : FilePath -> Task Never (Maybe FilePath)
-dirFindExecutable filename =
-    Impure.task "dirFindExecutable"
-        []
-        (Impure.StringBody filename)
-        (Impure.DecoderResolver (Decode.maybe Decode.string))
-
-
-dirCreateDirectoryIfMissing : Bool -> FilePath -> Task Never ()
-dirCreateDirectoryIfMissing createParents filename =
-    Impure.task "dirCreateDirectoryIfMissing"
-        []
-        (Impure.JsonBody
-            (Encode.object
-                [ ( "createParents", Encode.bool createParents )
-                , ( "filename", Encode.string filename )
-                ]
-            )
-        )
-        (Impure.Always ())
-
-
-dirGetCurrentDirectory : Task Never String
-dirGetCurrentDirectory =
-    Impure.task "dirGetCurrentDirectory"
-        []
-        Impure.EmptyBody
-        (Impure.StringResolver identity)
-
-
-dirGetAppUserDataDirectory : FilePath -> Task Never FilePath
-dirGetAppUserDataDirectory filename =
-    Impure.task "dirGetAppUserDataDirectory"
-        []
-        (Impure.StringBody filename)
-        (Impure.StringResolver identity)
-
-
-dirGetModificationTime : FilePath -> Task Never Time.Posix
-dirGetModificationTime filename =
-    Impure.task "dirGetModificationTime"
-        []
-        (Impure.StringBody filename)
-        (Impure.DecoderResolver (Decode.map Time.millisToPosix Decode.int))
-
-
-dirRemoveFile : FilePath -> Task Never ()
-dirRemoveFile path =
-    Impure.task "dirRemoveFile"
-        []
-        (Impure.StringBody path)
-        (Impure.Always ())
-
-
-dirRemoveDirectoryRecursive : FilePath -> Task Never ()
-dirRemoveDirectoryRecursive path =
-    Impure.task "dirRemoveDirectoryRecursive"
-        []
-        (Impure.StringBody path)
-        (Impure.Always ())
-
-
-dirDoesDirectoryExist : FilePath -> Task Never Bool
-dirDoesDirectoryExist path =
-    Impure.task "dirDoesDirectoryExist"
-        []
-        (Impure.StringBody path)
-        (Impure.DecoderResolver Decode.bool)
-
-
-dirCanonicalizePath : FilePath -> Task Never FilePath
-dirCanonicalizePath path =
-    Impure.task "dirCanonicalizePath"
-        []
-        (Impure.StringBody path)
-        (Impure.StringResolver identity)
-
-
-dirWithCurrentDirectory : FilePath -> Task Never a -> Task Never a
-dirWithCurrentDirectory dir action =
-    dirGetCurrentDirectory
-        |> Task.andThen
-            (\currentDir ->
-                bracket_
-                    (Impure.task "dirWithCurrentDirectory"
-                        []
-                        (Impure.StringBody dir)
-                        (Impure.Always ())
-                    )
-                    (Impure.task "dirWithCurrentDirectory"
-                        []
-                        (Impure.StringBody currentDir)
-                        (Impure.Always ())
-                    )
-                    action
-            )
-
-
-dirListDirectory : FilePath -> Task Never (List FilePath)
-dirListDirectory path =
-    Impure.task "dirListDirectory"
-        []
-        (Impure.StringBody path)
-        (Impure.DecoderResolver (Decode.list Decode.string))
-
-
-
--- System.Environment
-
-
-envLookupEnv : String -> Task Never (Maybe String)
-envLookupEnv name =
-    Impure.task "envLookupEnv"
-        []
-        (Impure.StringBody name)
-        (Impure.DecoderResolver (Decode.maybe Decode.string))
-
-
-envGetProgName : Task Never String
-envGetProgName =
-    Task.succeed "guida"
-
-
-envGetArgs : Task Never (List String)
-envGetArgs =
-    Impure.task "envGetArgs"
-        []
-        Impure.EmptyBody
-        (Impure.DecoderResolver (Decode.list Decode.string))
-
-
-
 -- Codec.Archive.Zip
 
 
@@ -1132,18 +973,6 @@ replGetInputLine prompt =
 replGetInputLineWithInitial : String -> ( String, String ) -> ReplInputT (Maybe String)
 replGetInputLineWithInitial prompt ( left, right ) =
     replGetInputLine (left ++ prompt ++ right)
-
-
-
--- NODE
-
-
-nodeGetDirname : Task Never String
-nodeGetDirname =
-    Impure.task "nodeGetDirname"
-        []
-        Impure.EmptyBody
-        (Impure.StringResolver identity)
 
 
 
