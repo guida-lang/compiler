@@ -76,7 +76,7 @@ describe("backwards compatibility", () => {
 
         try {
           child_process.execSync(
-            `../bin/index.js make src/${example}.elm ${commandFlag} --output ${guidaOutput}`,
+            `../bin/index.js make src/${example}.elm ${commandFlag} --output ${guidaOutput} --no-warnings`,
             {
               cwd: path.join(__dirname, "..", "examples")
             }
