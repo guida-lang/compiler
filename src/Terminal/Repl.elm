@@ -49,6 +49,7 @@ import System.Process as Process
 import Task exposing (Task)
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath)
+import Utils.System.IO as IO
 import Utils.Task.Extra as Task
 
 
@@ -75,7 +76,7 @@ run () flags =
                                     Utils.replRunInputT settings (Utils.replWithInterrupt (loop env IO.initialReplState))
                             in
                             State.evalStateT looper IO.initialReplState
-                                |> Task.andThen (\exitCode -> Exit.exitWith exitCode)
+                                |> Task.andThen (\exitCode -> crash "Exit.exitWith exitCode")
                         )
             )
 
@@ -789,7 +790,7 @@ getInterpreterHelp name findExe =
 
                     Nothing ->
                         IO.hPutStrLn IO.stderr (exeNotFound name)
-                            |> Task.andThen (\_ -> Exit.exitFailure)
+                            |> Task.andThen (\_ -> crash "Exit.exitFailure")
             )
 
 

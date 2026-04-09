@@ -1,12 +1,8 @@
 module Builder.Http exposing
-    ( Error(..)
-    , Header
+    ( Header
     , Manager
-    , MultiPart
     , Sha
     , accept
-    , errorDecoder
-    , errorEncoder
     , filePart
     , get
     , getArchive
@@ -27,12 +23,13 @@ import Compiler.Guida.Version as V
 import Http
 import Json.Decode as Decode
 import Json.Encode as Encode
+import System.Misc as Misc
 import Task exposing (Task)
 import Url.Builder
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
 import Utils.Impure as Impure
-import Utils.Main as Utils exposing (SomeException)
+import Utils.Main as Utils
 import Utils.Task.Extra as Task
 
 
@@ -97,17 +94,17 @@ type alias Header =
     ( String, String )
 
 
-get : Manager -> String -> List Header -> (Error -> e) -> (String -> Task Never (Result e a)) -> Task Never (Result e a)
+get : Manager -> String -> List Header -> (Misc.Error -> e) -> (String -> Task Never (Result e a)) -> Task Never (Result e a)
 get =
     fetch "GET"
 
 
-post : Manager -> String -> List Header -> (Error -> e) -> (String -> Task Never (Result e a)) -> Task Never (Result e a)
+post : Manager -> String -> List Header -> (Misc.Error -> e) -> (String -> Task Never (Result e a)) -> Task Never (Result e a)
 post =
     fetch "POST"
 
 
-fetch : String -> Manager -> String -> List Header -> (Error -> e) -> (String -> Task Never (Result e a)) -> Task Never (Result e a)
+fetch : String -> Manager -> String -> List Header -> (Misc.Error -> e) -> (String -> Task Never (Result e a)) -> Task Never (Result e a)
 fetch method _ url headers _ onSuccess =
     Impure.customTask method
         url
@@ -133,16 +130,6 @@ accept mime =
 
 
 
--- EXCEPTIONS
-
-
-type Error
-    = BadUrl String String
-    | BadHttp String Utils.HttpExceptionContent
-    | BadMystery String SomeException
-
-
-
 -- SHA
 
 
@@ -159,24 +146,10 @@ shaToChars =
 -- FETCH ARCHIVE
 
 
-getArchive : Manager -> String -> (Error -> e) -> e -> (( Sha, Zip.Archive ) -> Task Never (Result e a)) -> Task Never (Result e a)
+getArchive : Manager -> String -> (Misc.Error -> e) -> e -> (( Sha, Zip.Archive ) -> Task Never (Result e a)) -> Task Never (Result e a)
 getArchive _ url _ _ onSuccess =
-    Impure.task "getArchive"
-        []
-        (Impure.StringBody url)
-        (Impure.DecoderResolver
-            (Decode.map2 Tuple.pair
-                (Decode.field "sha" Decode.string)
-                (Decode.field "archive"
-                    (Decode.list
-                        (Decode.map2 Zip.Entry
-                            (Decode.field "eRelativePath" Decode.string)
-                            (Decode.field "eData" Decode.string)
-                        )
-                    )
-                )
-            )
-        )
+    Misc.getArchive url
+        |> Task.map (Tuple.mapSecond (List.map (uncurry Zip.Entry)))
         |> Task.andThen onSuccess
 
 
@@ -184,119 +157,21 @@ getArchive _ url _ _ onSuccess =
 -- UPLOAD
 
 
-type MultiPart
-    = FilePart String String
-    | JsonPart String String Encode.Value
-    | StringPart String String
-
-
-upload : Manager -> String -> List MultiPart -> Task Never (Result Error ())
+upload : Manager -> String -> List Misc.MultiPart -> Task Never (Result Misc.Error ())
 upload _ url parts =
-    Impure.task "httpUpload"
-        []
-        (Impure.JsonBody
-            (Encode.object
-                [ ( "urlStr", Encode.string url )
-                , ( "headers", Encode.object (List.map (Tuple.mapSecond Encode.string) (addDefaultHeaders [])) )
-                , ( "parts"
-                  , Encode.list
-                        (\part ->
-                            case part of
-                                FilePart name filePath ->
-                                    Encode.object
-                                        [ ( "type", Encode.string "FilePart" )
-                                        , ( "name", Encode.string name )
-                                        , ( "filePath", Encode.string filePath )
-                                        ]
-
-                                JsonPart name filePath value ->
-                                    Encode.object
-                                        [ ( "type", Encode.string "JsonPart" )
-                                        , ( "name", Encode.string name )
-                                        , ( "filePath", Encode.string filePath )
-                                        , ( "value", value )
-                                        ]
-
-                                StringPart name string ->
-                                    Encode.object
-                                        [ ( "type", Encode.string "StringPart" )
-                                        , ( "name", Encode.string name )
-                                        , ( "string", Encode.string string )
-                                        ]
-                        )
-                        parts
-                  )
-                ]
-            )
-        )
-        (Impure.Always (Ok ()))
+    Misc.httpUpload url (addDefaultHeaders []) parts
 
 
-filePart : String -> String -> MultiPart
+filePart : String -> String -> Misc.MultiPart
 filePart name filePath =
-    FilePart name filePath
+    Misc.filePart name filePath
 
 
-jsonPart : String -> String -> Encode.Value -> MultiPart
+jsonPart : String -> String -> Encode.Value -> Misc.MultiPart
 jsonPart name filePath value =
-    JsonPart name filePath value
+    Misc.jsonPart name filePath value
 
 
-stringPart : String -> String -> MultiPart
+stringPart : String -> String -> Misc.MultiPart
 stringPart name string =
-    StringPart name string
-
-
-
--- ENCODERS and DECODERS
-
-
-errorEncoder : Error -> BE.Encoder
-errorEncoder error =
-    case error of
-        BadUrl url reason ->
-            BE.sequence
-                [ BE.unsignedInt8 0
-                , BE.string url
-                , BE.string reason
-                ]
-
-        BadHttp url httpExceptionContent ->
-            BE.sequence
-                [ BE.unsignedInt8 1
-                , BE.string url
-                , Utils.httpExceptionContentEncoder httpExceptionContent
-                ]
-
-        BadMystery url someException ->
-            BE.sequence
-                [ BE.unsignedInt8 2
-                , BE.string url
-                , Utils.someExceptionEncoder someException
-                ]
-
-
-errorDecoder : BD.Decoder Error
-errorDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.map2 BadUrl
-                            BD.string
-                            BD.string
-
-                    1 ->
-                        BD.map2 BadHttp
-                            BD.string
-                            Utils.httpExceptionContentDecoder
-
-                    2 ->
-                        BD.map2 BadMystery
-                            BD.string
-                            Utils.someExceptionDecoder
-
-                    _ ->
-                        BD.fail
-            )
+    Misc.stringPart name string

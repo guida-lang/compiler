@@ -3,7 +3,6 @@ module Builder.File exposing
     , exists
     , getTime
     , readBinary
-    , readStdin
     , readUtf8
     , remove
     , timeDecoder
@@ -17,12 +16,14 @@ module Builder.File exposing
 import Codec.Archive.Zip as Zip
 import System.Directory as Dir
 import System.IO as IO
+import System.Misc as Misc
 import Task exposing (Task)
 import Time
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
 import Utils.Impure as Impure
 import Utils.Main as Utils exposing (FilePath)
+import Utils.System.IO as IO
 import Utils.Task.Extra as Task
 
 
@@ -108,12 +109,7 @@ writeUtf8 =
 
 readUtf8 : FilePath -> Task Never String
 readUtf8 path =
-    Impure.task "read" [] (Impure.StringBody path) (Impure.StringResolver identity)
-
-
-readStdin : Task Never String
-readStdin =
-    Impure.task "readStdin" [] Impure.EmptyBody (Impure.StringResolver identity)
+    Misc.readString path
 
 
 

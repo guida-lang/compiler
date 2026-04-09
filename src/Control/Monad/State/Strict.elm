@@ -12,9 +12,9 @@ module Control.Monad.State.Strict exposing
 
 import Json.Decode as Decode
 import Json.Encode as Encode
-import System.IO as IO
 import Task exposing (Task)
 import Utils.Impure as Impure
+import Utils.System.IO as IO
 import Utils.Task.Extra as Task
 
 

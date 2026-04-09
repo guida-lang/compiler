@@ -16,6 +16,7 @@ import Compiler.Reporting.Error as Error
 import Maybe.Extra as Maybe
 import System.IO as IO
 import Task exposing (Task)
+import Utils.System.IO as IO
 import Utils.Task.Extra as Task
 
 

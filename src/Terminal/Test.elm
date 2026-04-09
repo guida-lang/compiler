@@ -40,6 +40,7 @@ import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (Parser(..))
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath)
+import Utils.System.IO as IO
 import Utils.Task.Extra as Task
 
 
@@ -262,11 +263,11 @@ requireElmTestPackageApp root depsDirect testDirect =
 
         Just version ->
             IO.hPutStrLn IO.stderr (Stuff.rootProjectFilePath root ++ "\nThis version of guida-test only supports " ++ Pkg.toChars Pkg.test ++ " 2.x, but you have " ++ V.toChars version ++ ".")
-                |> Task.andThen (\_ -> Exit.exitFailure)
+                |> Task.andThen (\_ -> crash "Exit.exitFailure")
 
         Nothing ->
             IO.hPutStrLn IO.stderr (Stuff.rootProjectFilePath root ++ "\nYou must have \"" ++ Pkg.toChars Pkg.test ++ "\" in your \"test-dependencies\" or \"dependencies\" to run guida-test.")
-                |> Task.andThen (\_ -> Exit.exitFailure)
+                |> Task.andThen (\_ -> crash "Exit.exitFailure")
 
 
 requireElmTestPackagePkg : Stuff.Root -> Dict ( String, String ) Pkg.Name C.Constraint -> Dict ( String, String ) Pkg.Name C.Constraint -> Task Never ()
@@ -279,11 +280,11 @@ requireElmTestPackagePkg root deps test =
 
                 _ ->
                     IO.hPutStrLn IO.stderr (Stuff.rootProjectFilePath root ++ "\nThis version of guida-test only supports " ++ Pkg.toChars Pkg.test ++ " 2.x, but you have " ++ C.toChars range ++ ".")
-                        |> Task.andThen (\_ -> Exit.exitFailure)
+                        |> Task.andThen (\_ -> crash "Exit.exitFailure")
 
         Nothing ->
             IO.hPutStrLn IO.stderr (Stuff.rootProjectFilePath root ++ "\nYou must have \"" ++ Pkg.toChars Pkg.test ++ "\" in your \"test-dependencies\" or \"dependencies\" to run guida-test.")
-                |> Task.andThen (\_ -> Exit.exitFailure)
+                |> Task.andThen (\_ -> crash "Exit.exitFailure")
 
 
 interpret : FilePath -> String -> Task Never Exit.ExitCode
@@ -1234,7 +1235,7 @@ getInterpreterHelp name findExe =
 
                     Nothing ->
                         IO.hPutStrLn IO.stderr (exeNotFound name)
-                            |> Task.andThen (\_ -> Exit.exitFailure)
+                            |> Task.andThen (\_ -> crash "Exit.exitFailure")
             )
 
 

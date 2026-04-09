@@ -3,16 +3,11 @@ module Utils.Main exposing
     , ChItem
     , Chan
     , FilePath
-    , HttpExceptionContent(..)
-    , HttpResponse(..)
-    , HttpResponseHeaders
-    , HttpStatus(..)
     , LockSharedExclusive(..)
     , ReplCompletion(..)
     , ReplCompletionFunc
     , ReplInputT
     , ReplSettings(..)
-    , SomeException(..)
     , ZipArchive(..)
     , ZipEntry(..)
     , binaryDecodeFileOrFail
@@ -42,12 +37,6 @@ module Utils.Main exposing
     , fpTakeDirectory
     , fpTakeExtension
     , fpTakeFileName
-    , httpExceptionContentDecoder
-    , httpExceptionContentEncoder
-    , httpHLocation
-    , httpResponseHeaders
-    , httpResponseStatus
-    , httpStatusCode
     , indexedZipWithA
     , keysSet
     , liftIOInputT
@@ -94,8 +83,6 @@ module Utils.Main exposing
     , sequenceDictResult_
     , sequenceListMaybe
     , sequenceNonemptyListResult
-    , someExceptionDecoder
-    , someExceptionEncoder
     , unlines
     , unzip3
     , writeChan
@@ -118,12 +105,14 @@ import Prelude
 import Process
 import System.Exit as Exit
 import System.IO as IO
+import System.Misc as Misc
 import Task exposing (Task)
 import Time
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
 import Utils.Impure as Impure
+import Utils.System.IO as IO
 import Utils.Task.Extra as Task
 
 
@@ -758,56 +747,7 @@ type ZipEntry
 
 
 
--- Network.HTTP.Client
-
-
-type HttpExceptionContent
-    = StatusCodeException (HttpResponse ()) String
-    | TooManyRedirects (List (HttpResponse ()))
-    | ConnectionFailure SomeException
-
-
-type HttpResponse body
-    = HttpResponse
-        { responseStatus : HttpStatus
-        , responseHeaders : HttpResponseHeaders
-        }
-
-
-type alias HttpResponseHeaders =
-    List ( String, String )
-
-
-httpResponseStatus : HttpResponse body -> HttpStatus
-httpResponseStatus (HttpResponse { responseStatus }) =
-    responseStatus
-
-
-httpStatusCode : HttpStatus -> Int
-httpStatusCode (HttpStatus statusCode _) =
-    statusCode
-
-
-httpResponseHeaders : HttpResponse body -> HttpResponseHeaders
-httpResponseHeaders (HttpResponse { responseHeaders }) =
-    responseHeaders
-
-
-httpHLocation : String
-httpHLocation =
-    "Location"
-
-
-type HttpStatus
-    = HttpStatus Int String
-
-
-
 -- Control.Exception
-
-
-type SomeException
-    = SomeException
 
 
 type AsyncException
@@ -964,120 +904,9 @@ replCompleteWord _ _ _ =
 
 replGetInputLine : String -> ReplInputT (Maybe String)
 replGetInputLine prompt =
-    Impure.task "replGetInputLine"
-        []
-        (Impure.StringBody prompt)
-        (Impure.DecoderResolver (Decode.maybe Decode.string))
+    Misc.replGetInputLine prompt
 
 
 replGetInputLineWithInitial : String -> ( String, String ) -> ReplInputT (Maybe String)
 replGetInputLineWithInitial prompt ( left, right ) =
     replGetInputLine (left ++ prompt ++ right)
-
-
-
--- ENCODERS and DECODERS
-
-
-someExceptionEncoder : SomeException -> BE.Encoder
-someExceptionEncoder someException =
-    case someException of
-        SomeException ->
-            BE.unsignedInt8 0
-
-
-someExceptionDecoder : BD.Decoder SomeException
-someExceptionDecoder =
-    BD.unsignedInt8
-        |> BD.map (\_ -> SomeException)
-
-
-httpResponseEncoder : HttpResponse body -> BE.Encoder
-httpResponseEncoder (HttpResponse httpResponse) =
-    BE.sequence
-        [ httpStatusEncoder httpResponse.responseStatus
-        , httpResponseHeadersEncoder httpResponse.responseHeaders
-        ]
-
-
-httpResponseDecoder : BD.Decoder (HttpResponse body)
-httpResponseDecoder =
-    BD.map2
-        (\responseStatus responseHeaders ->
-            HttpResponse
-                { responseStatus = responseStatus
-                , responseHeaders = responseHeaders
-                }
-        )
-        httpStatusDecoder
-        httpResponseHeadersDecoder
-
-
-httpStatusEncoder : HttpStatus -> BE.Encoder
-httpStatusEncoder (HttpStatus statusCode statusMessage) =
-    BE.sequence
-        [ BE.int statusCode
-        , BE.string statusMessage
-        ]
-
-
-httpStatusDecoder : BD.Decoder HttpStatus
-httpStatusDecoder =
-    BD.map2 HttpStatus
-        BD.int
-        BD.string
-
-
-httpResponseHeadersEncoder : HttpResponseHeaders -> BE.Encoder
-httpResponseHeadersEncoder =
-    BE.list (BE.jsonPair BE.string BE.string)
-
-
-httpResponseHeadersDecoder : BD.Decoder HttpResponseHeaders
-httpResponseHeadersDecoder =
-    BD.list (BD.jsonPair BD.string BD.string)
-
-
-httpExceptionContentEncoder : HttpExceptionContent -> BE.Encoder
-httpExceptionContentEncoder httpExceptionContent =
-    case httpExceptionContent of
-        StatusCodeException response body ->
-            BE.sequence
-                [ BE.unsignedInt8 0
-                , httpResponseEncoder response
-                , BE.string body
-                ]
-
-        TooManyRedirects responses ->
-            BE.sequence
-                [ BE.unsignedInt8 1
-                , BE.list httpResponseEncoder responses
-                ]
-
-        ConnectionFailure someException ->
-            BE.sequence
-                [ BE.unsignedInt8 2
-                , someExceptionEncoder someException
-                ]
-
-
-httpExceptionContentDecoder : BD.Decoder HttpExceptionContent
-httpExceptionContentDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.map2 StatusCodeException
-                            httpResponseDecoder
-                            BD.string
-
-                    1 ->
-                        BD.map TooManyRedirects (BD.list httpResponseDecoder)
-
-                    2 ->
-                        BD.map ConnectionFailure someExceptionDecoder
-
-                    _ ->
-                        BD.fail
-            )

@@ -29,8 +29,8 @@ import Compiler.Data.OneOrMore exposing (OneOrMore(..))
 import Data.Map as Dict exposing (Dict)
 import Data.Set as EverySet exposing (EverySet)
 import Json.Encode as Encode
-import System.IO as IO
 import Task exposing (Task)
+import Utils.System.IO as IO
 
 
 

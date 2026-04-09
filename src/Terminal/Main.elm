@@ -2,7 +2,7 @@ module Terminal.Main exposing (main)
 
 import Compiler.Guida.Version as V
 import Compiler.Reporting.Doc as D
-import System.IO as IO
+import System.Exit as Exit
 import Task exposing (Task)
 import Terminal.Bump as Bump
 import Terminal.Diff as Diff
@@ -19,7 +19,9 @@ import Terminal.Terminal.Internal as Terminal
 import Terminal.Test as Test
 import Terminal.Uninstall as Uninstall
 import Terminal.Upgrade as Upgrade
+import Utils.Crash exposing (crash)
 import Utils.Impure as Impure
+import Utils.System.IO as IO
 import Utils.Task.Extra as Task
 
 
@@ -27,13 +29,7 @@ main : IO.Program
 main =
     IO.run
         (app
-            |> Task.andThen
-                (\() ->
-                    Impure.task "exitWith"
-                        []
-                        (Impure.StringBody "0")
-                        Impure.Crash
-                )
+            |> Task.andThen (\() -> crash "Exit.exitSuccess")
         )
 
 

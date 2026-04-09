@@ -13,9 +13,9 @@ import Compiler.Guida.Constraint as C
 import Compiler.Guida.Package as Pkg
 import Compiler.Guida.Version as V
 import Data.Map as Dict exposing (Dict)
-import System.IO as IO
 import Task exposing (Task)
 import Utils.Main as Utils
+import Utils.System.IO as IO
 import Utils.Task.Extra as Task
 
 

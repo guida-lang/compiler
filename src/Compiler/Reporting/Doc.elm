@@ -43,7 +43,7 @@ import Compiler.Json.Encode as E
 import Maybe.Extra as Maybe
 import Prelude
 import System.Console.Ansi as Ansi
-import System.IO exposing (Handle)
+import System.IO as IO
 import Task exposing (Task)
 import Text.PrettyPrint.ANSI.Leijen as P
 
@@ -81,7 +81,7 @@ fromInt n =
 -- TO STRING
 
 
-toAnsi : Handle -> Doc -> Task Never ()
+toAnsi : IO.Handle -> Doc -> Task Never ()
 toAnsi handle doc =
     P.displayIO handle (P.renderPretty 1 80 doc)
 

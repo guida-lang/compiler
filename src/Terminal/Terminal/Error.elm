@@ -29,7 +29,9 @@ import Terminal.Terminal.Internal
         , toName
         )
 import Text.PrettyPrint.ANSI.Leijen as P
+import Utils.Crash exposing (crash)
 import Utils.Main as Utils
+import Utils.System.IO as IO
 import Utils.Task.Extra as Task
 
 
@@ -67,7 +69,7 @@ exitWith code docs =
                         (adjust (P.vcat (List.concatMap (\d -> [ d, P.text "" ]) docs)))
                     )
                     |> Task.andThen (\_ -> IO.hPutStrLn IO.stderr "")
-                    |> Task.andThen (\_ -> Exit.exitWith code)
+                    |> Task.andThen (\_ -> crash "Exit.exitWith code")
             )
 
 

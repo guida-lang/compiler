@@ -20,21 +20,13 @@ module Builder.Reporting.Exit exposing
     , Test(..)
     , Uninstall(..)
     , Upgrade(..)
-    , buildProblemDecoder
-    , buildProblemEncoder
-    , buildProjectProblemDecoder
-    , buildProjectProblemEncoder
     , bumpToReport
-    , detailsBadDepDecoder
-    , detailsBadDepEncoder
     , diffToReport
     , initToReport
     , installToReport
     , makeToReport
     , newPackageOverview
     , publishToReport
-    , registryProblemDecoder
-    , registryProblemEncoder
     , replToReport
     , testToReport
     , toJson
@@ -64,6 +56,7 @@ import Compiler.Reporting.Error.Import as Import
 import Compiler.Reporting.Error.Json as Json
 import Compiler.Reporting.Render.Code as Code
 import Data.Map as Dict exposing (Dict)
+import System.Misc as Misc
 import Task exposing (Task)
 import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
@@ -583,12 +576,12 @@ type Publish
     | PublishElmNoLicense
     | PublishBuildProblem BuildProblem
     | PublishMissingTag V.Version
-    | PublishCannotGetTag V.Version Http.Error
+    | PublishCannotGetTag V.Version Misc.Error
     | PublishCannotGetTagData V.Version String String
-    | PublishCannotGetZip Http.Error
+    | PublishCannotGetZip Misc.Error
     | PublishCannotDecodeZip String
     | PublishCannotGetDocs V.Version V.Version DocsProblem
-    | PublishCannotRegister Http.Error
+    | PublishCannotRegister Misc.Error
     | PublishNoGit
     | PublishLocalChanges V.Version
       --
@@ -1135,8 +1128,8 @@ publishToReport publish =
 
         PublishCannotGetTag version httpError ->
             case httpError of
-                Http.BadHttp _ (Utils.StatusCodeException response _) ->
-                    if Utils.httpStatusCode (Utils.httpResponseStatus response) == 404 then
+                Misc.BadHttp _ (Misc.StatusCodeException response _) ->
+                    if Misc.httpStatusCode (Misc.httpResponseStatus response) == 404 then
                         let
                             vsn : String
                             vsn =
@@ -1322,7 +1315,7 @@ badZipReport =
 
 
 type DocsProblem
-    = DP_Http Http.Error
+    = DP_Http Misc.Error
     | DP_Data String String
     | DP_Cache
 
@@ -1849,7 +1842,7 @@ type Solver
     | SolverBadCacheElmData Pkg.Name V.Version
     | SolverBadHttpGuidaData Pkg.Name V.Version String
     | SolverBadHttpElmData Pkg.Name V.Version String
-    | SolverBadHttp Pkg.Name V.Version Http.Error
+    | SolverBadHttp Pkg.Name V.Version Misc.Error
 
 
 toSolverReport : Solver -> Help.Report
@@ -3397,9 +3390,9 @@ toBadDepRank badDep =
 
 
 type PackageProblem
-    = PP_BadEndpointRequest Http.Error
+    = PP_BadEndpointRequest Misc.Error
     | PP_BadEndpointContent String
-    | PP_BadArchiveRequest Http.Error
+    | PP_BadArchiveRequest Misc.Error
     | PP_BadArchiveContent String
     | PP_BadArchiveHash String String String
 
@@ -3460,7 +3453,7 @@ toPackageProblemReport pkg vsn problem =
 
 
 type RegistryProblem
-    = RP_Http Http.Error
+    = RP_Http Misc.Error
     | RP_Data String String
 
 
@@ -3498,7 +3491,7 @@ toRegistryProblemReport title problem context =
                 ]
 
 
-toHttpErrorReport : String -> Http.Error -> String -> Help.Report
+toHttpErrorReport : String -> Misc.Error -> String -> Help.Report
 toHttpErrorReport title err context =
     let
         toHttpReport : String -> String -> List D.Doc -> Help.Report
@@ -3508,7 +3501,7 @@ toHttpErrorReport title err context =
                     :: details
     in
     case err of
-        Http.BadUrl url reason ->
+        Misc.BadUrl url reason ->
             toHttpReport (context ++ ", so I wanted to fetch:")
                 url
                 [ D.reflow "But my HTTP library is saying this is not a valid URL. It is saying:"
@@ -3516,12 +3509,12 @@ toHttpErrorReport title err context =
                 , D.reflow "This may indicate that there is some problem in the compiler, so please open an issue at https://github.com/guida-lang/compiler/issues listing your operating system, Guida version, the command you ran, the terminal output, and any additional information that might help others reproduce the error."
                 ]
 
-        Http.BadHttp url httpExceptionContent ->
+        Misc.BadHttp url httpExceptionContent ->
             case httpExceptionContent of
-                Utils.StatusCodeException response body ->
+                Misc.StatusCodeException response body ->
                     let
-                        (Utils.HttpStatus code message) =
-                            Utils.httpResponseStatus response
+                        (Misc.HttpStatus code message) =
+                            Misc.httpResponseStatus response
                     in
                     toHttpReport (context ++ ", so I tried to fetch:")
                         url
@@ -3538,7 +3531,7 @@ toHttpErrorReport title err context =
                         , D.reflow "This may mean some online endpoint changed in an unexpected way, so if does not seem like something on your side is causing this (e.g. firewall) please report this to https://github.com/guida-lang/compiler/issues with your operating system, Guida version, the command you ran, the terminal output, and any additional information that can help others reproduce the error!"
                         ]
 
-                Utils.TooManyRedirects responses ->
+                Misc.TooManyRedirects responses ->
                     toHttpReport (context ++ ", so I tried to fetch:")
                         url
                         [ D.reflow <|
@@ -3559,7 +3552,7 @@ toHttpErrorReport title err context =
                             "Are you somewhere with a slow internet connection? Or no internet? Does the link I am trying to fetch work in your browser? Maybe the site is down? Does your internet connection have a firewall that blocks certain domains? It is usually something like that!"
                         ]
 
-        Http.BadMystery url Utils.SomeException ->
+        Misc.BadMystery url Misc.SomeException ->
             toHttpReport (context ++ ", so I tried to fetch:")
                 url
                 [ D.reflow <| "But I ran into something weird! I was able to extract this error message:"
@@ -3569,13 +3562,13 @@ toHttpErrorReport title err context =
                 ]
 
 
-toRedirectDoc : Utils.HttpResponse body -> D.Doc
+toRedirectDoc : Misc.HttpResponse body -> D.Doc
 toRedirectDoc response =
     let
-        (Utils.HttpStatus code message) =
-            Utils.httpResponseStatus response
+        (Misc.HttpStatus code message) =
+            Misc.httpResponseStatus response
     in
-    case Utils.listLookup Utils.httpHLocation (Utils.httpResponseHeaders response) of
+    case Utils.listLookup Misc.httpHLocation (Misc.httpResponseHeaders response) of
         Just loc ->
             D.red (D.fromInt code) |> D.a (D.fromChars " - ") |> D.a (D.fromChars loc)
 
@@ -4326,313 +4319,3 @@ testToReport test =
 
         TestBadGenerate generateProblem ->
             toGenerateReport generateProblem
-
-
-
--- ENCODERS and DECODERS
-
-
-detailsBadDepEncoder : DetailsBadDep -> BE.Encoder
-detailsBadDepEncoder detailsBadDep =
-    case detailsBadDep of
-        BD_BadDownload pkg vsn packageProblem ->
-            BE.sequence
-                [ BE.unsignedInt8 0
-                , Pkg.nameEncoder pkg
-                , V.versionEncoder vsn
-                , packageProblemEncoder packageProblem
-                ]
-
-        BD_BadBuild target pkg vsn fingerprint ->
-            BE.sequence
-                [ BE.unsignedInt8 1
-                , Target.encoder target
-                , Pkg.nameEncoder pkg
-                , V.versionEncoder vsn
-                , BE.assocListDict compare Pkg.nameEncoder V.versionEncoder fingerprint
-                ]
-
-
-detailsBadDepDecoder : BD.Decoder DetailsBadDep
-detailsBadDepDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.map3 BD_BadDownload
-                            Pkg.nameDecoder
-                            V.versionDecoder
-                            packageProblemDecoder
-
-                    1 ->
-                        BD.map4 BD_BadBuild
-                            Target.decoder
-                            Pkg.nameDecoder
-                            V.versionDecoder
-                            (BD.assocListDict identity Pkg.nameDecoder V.versionDecoder)
-
-                    _ ->
-                        BD.fail
-            )
-
-
-buildProblemEncoder : BuildProblem -> BE.Encoder
-buildProblemEncoder buildProblem =
-    case buildProblem of
-        BuildBadModules root e es ->
-            BE.sequence
-                [ BE.unsignedInt8 0
-                , BE.string root
-                , Error.moduleEncoder e
-                , BE.list Error.moduleEncoder es
-                ]
-
-        BuildProjectProblem problem ->
-            BE.sequence
-                [ BE.unsignedInt8 1
-                , buildProjectProblemEncoder problem
-                ]
-
-
-buildProblemDecoder : BD.Decoder BuildProblem
-buildProblemDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.map3 BuildBadModules
-                            BD.string
-                            Error.moduleDecoder
-                            (BD.list Error.moduleDecoder)
-
-                    1 ->
-                        BD.map BuildProjectProblem buildProjectProblemDecoder
-
-                    _ ->
-                        BD.fail
-            )
-
-
-buildProjectProblemEncoder : BuildProjectProblem -> BE.Encoder
-buildProjectProblemEncoder buildProjectProblem =
-    case buildProjectProblem of
-        BP_PathUnknown path ->
-            BE.sequence
-                [ BE.unsignedInt8 0
-                , BE.string path
-                ]
-
-        BP_WithBadExtension target path ->
-            BE.sequence
-                [ BE.unsignedInt8 1
-                , Target.encoder target
-                , BE.string path
-                ]
-
-        BP_WithAmbiguousSrcDir path srcDir1 srcDir2 ->
-            BE.sequence
-                [ BE.unsignedInt8 2
-                , BE.string path
-                , BE.string srcDir1
-                , BE.string srcDir2
-                ]
-
-        BP_MainPathDuplicate path1 path2 ->
-            BE.sequence
-                [ BE.unsignedInt8 3
-                , BE.string path1
-                , BE.string path2
-                ]
-
-        BP_RootNameDuplicate name outsidePath otherPath ->
-            BE.sequence
-                [ BE.unsignedInt8 4
-                , ModuleName.rawEncoder name
-                , BE.string outsidePath
-                , BE.string otherPath
-                ]
-
-        BP_RootNameInvalid givenPath srcDir names ->
-            BE.sequence
-                [ BE.unsignedInt8 5
-                , BE.string givenPath
-                , BE.string srcDir
-                , BE.list BE.string names
-                ]
-
-        BP_CannotLoadDependencies ->
-            BE.unsignedInt8 6
-
-        BP_Cycle target name names ->
-            BE.sequence
-                [ BE.unsignedInt8 7
-                , Target.encoder target
-                , ModuleName.rawEncoder name
-                , BE.list ModuleName.rawEncoder names
-                ]
-
-        BP_MissingExposed problems ->
-            BE.sequence
-                [ BE.unsignedInt8 8
-                , BE.nonempty (BE.jsonPair ModuleName.rawEncoder Import.problemEncoder) problems
-                ]
-
-
-buildProjectProblemDecoder : BD.Decoder BuildProjectProblem
-buildProjectProblemDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.map BP_PathUnknown BD.string
-
-                    1 ->
-                        BD.map2 BP_WithBadExtension
-                            Target.decoder
-                            BD.string
-
-                    2 ->
-                        BD.map3 BP_WithAmbiguousSrcDir
-                            BD.string
-                            BD.string
-                            BD.string
-
-                    3 ->
-                        BD.map2 BP_MainPathDuplicate
-                            BD.string
-                            BD.string
-
-                    4 ->
-                        BD.map3 BP_RootNameDuplicate
-                            ModuleName.rawDecoder
-                            BD.string
-                            BD.string
-
-                    5 ->
-                        BD.map3 BP_RootNameInvalid
-                            BD.string
-                            BD.string
-                            (BD.list BD.string)
-
-                    6 ->
-                        BD.succeed BP_CannotLoadDependencies
-
-                    7 ->
-                        BD.map3 BP_Cycle
-                            Target.decoder
-                            ModuleName.rawDecoder
-                            (BD.list ModuleName.rawDecoder)
-
-                    8 ->
-                        BD.map BP_MissingExposed
-                            (BD.nonempty
-                                (BD.jsonPair ModuleName.rawDecoder Import.problemDecoder)
-                            )
-
-                    _ ->
-                        BD.fail
-            )
-
-
-registryProblemEncoder : RegistryProblem -> BE.Encoder
-registryProblemEncoder registryProblem =
-    case registryProblem of
-        RP_Http err ->
-            BE.sequence
-                [ BE.unsignedInt8 0
-                , Http.errorEncoder err
-                ]
-
-        RP_Data url body ->
-            BE.sequence
-                [ BE.unsignedInt8 1
-                , BE.string url
-                , BE.string body
-                ]
-
-
-registryProblemDecoder : BD.Decoder RegistryProblem
-registryProblemDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.map RP_Http Http.errorDecoder
-
-                    1 ->
-                        BD.map2 RP_Data
-                            BD.string
-                            BD.string
-
-                    _ ->
-                        BD.fail
-            )
-
-
-packageProblemEncoder : PackageProblem -> BE.Encoder
-packageProblemEncoder packageProblem =
-    case packageProblem of
-        PP_BadEndpointRequest httpError ->
-            BE.sequence
-                [ BE.unsignedInt8 0
-                , Http.errorEncoder httpError
-                ]
-
-        PP_BadEndpointContent url ->
-            BE.sequence
-                [ BE.unsignedInt8 1
-                , BE.string url
-                ]
-
-        PP_BadArchiveRequest httpError ->
-            BE.sequence
-                [ BE.unsignedInt8 2
-                , Http.errorEncoder httpError
-                ]
-
-        PP_BadArchiveContent url ->
-            BE.sequence
-                [ BE.unsignedInt8 3
-                , BE.string url
-                ]
-
-        PP_BadArchiveHash url expectedHash actualHash ->
-            BE.sequence
-                [ BE.unsignedInt8 4
-                , BE.string url
-                , BE.string expectedHash
-                , BE.string actualHash
-                ]
-
-
-packageProblemDecoder : BD.Decoder PackageProblem
-packageProblemDecoder =
-    BD.unsignedInt8
-        |> BD.andThen
-            (\idx ->
-                case idx of
-                    0 ->
-                        BD.map PP_BadEndpointRequest Http.errorDecoder
-
-                    1 ->
-                        BD.map PP_BadEndpointContent BD.string
-
-                    2 ->
-                        BD.map PP_BadArchiveRequest Http.errorDecoder
-
-                    3 ->
-                        BD.map PP_BadArchiveContent BD.string
-
-                    4 ->
-                        BD.map3 PP_BadArchiveHash
-                            BD.string
-                            BD.string
-                            BD.string
-
-                    _ ->
-                        BD.fail
-            )

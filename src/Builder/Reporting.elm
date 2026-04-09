@@ -32,7 +32,9 @@ import Process
 import System.Exit as Exit
 import System.IO as IO
 import Task exposing (Task)
+import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (Chan)
+import Utils.System.IO as IO
 import Utils.Task.Extra as Task
 
 
@@ -77,7 +79,7 @@ attempt toReport work =
 
                     Err x ->
                         Exit.toStderr (toReport x)
-                            |> Task.andThen (\_ -> Exit.exitFailure)
+                            |> Task.andThen (\_ -> crash "Exit.exitFailure")
             )
 
 
@@ -94,16 +96,16 @@ attemptWithStyle style toReport work =
                     Err x ->
                         case style of
                             Silent ->
-                                Exit.exitFailure
+                                crash "Exit.exitFailure"
 
                             Json ->
                                 Utils.builderHPutBuilder IO.stderr (Encode.encodeUgly (Exit.toJson (toReport x)))
-                                    |> Task.andThen (\_ -> Exit.exitFailure)
+                                    |> Task.andThen (\_ -> crash "Exit.exitFailure")
 
                             Terminal mvar ->
                                 MVar.readMVar mvar
                                     |> Task.andThen (\_ -> Exit.toStderr (toReport x))
-                                    |> Task.andThen (\_ -> Exit.exitFailure)
+                                    |> Task.andThen (\_ -> crash "Exit.exitFailure")
             )
 
 

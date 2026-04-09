@@ -18,6 +18,7 @@ import Compiler.Reporting.Doc as D
 import Data.Map as Dict exposing (Dict)
 import System.IO as IO
 import Task exposing (Task)
+import Utils.System.IO as IO
 import Utils.Task.Extra as Task
 
 

@@ -16,7 +16,9 @@ import System.Directory as Dir
 import System.Exit as Exit
 import System.IO as IO
 import Task exposing (Task)
+import Utils.Crash exposing (crash)
 import Utils.Main as Utils exposing (FilePath)
+import Utils.System.IO as IO
 import Utils.Task.Extra as Task
 
 
@@ -36,7 +38,7 @@ run paths ((Flags _ autoYes _ _) as flags) =
                 case determineWhatToDoFromConfig flags resolvedInputFiles of
                     Err err ->
                         IO.hPutStrLn IO.stderr (toConsoleErrorMessage err)
-                            |> Task.andThen (\_ -> Exit.exitFailure)
+                            |> Task.andThen (\_ -> crash "Exit.exitFailure")
 
                     Ok a ->
                         Task.succeed a
@@ -48,7 +50,7 @@ run paths ((Flags _ autoYes _ _) as flags) =
                     Task.succeed ()
 
                 else
-                    Exit.exitFailure
+                    crash "Exit.exitFailure"
             )
 
 
@@ -527,7 +529,7 @@ updateFile result =
 
 readStdin : Task Never ( FilePath, String )
 readStdin =
-    File.readStdin
+    IO.getLine
         |> Task.map (Tuple.pair "<STDIN>")
 
 

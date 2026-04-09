@@ -22,7 +22,9 @@ import System.IO as IO
 import Task exposing (Task)
 import Terminal.Terminal.Error as Error
 import Terminal.Terminal.Internal exposing (Args(..), Command(..), CompleteArgs(..), Flag(..), Flags(..), Parser, RequiredArgs(..), toName)
+import Utils.Crash exposing (crash)
 import Utils.Main as Utils
+import Utils.System.IO as IO
 import Utils.Task.Extra as Task
 
 
@@ -46,7 +48,7 @@ app intro outro commands =
                         IO.hPutStrLn IO.stdout
                             -- (V.toChars V.compiler)
                             "1.0.0-beta.2"
-                            |> Task.andThen (\_ -> Exit.exitSuccess)
+                            |> Task.andThen (\_ -> crash "Exit.exitSuccess")
 
                     command :: chunks ->
                         case List.find (\cmd -> toName cmd == command) commands of
