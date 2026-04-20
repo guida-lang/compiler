@@ -39,17 +39,17 @@ import Utils.Task.Extra as Task
 -- EXIT
 
 
-exitSuccess : List P.Doc -> Task Never a
+exitSuccess : List P.Doc -> Task Exit.ExitCode a
 exitSuccess =
     exitWith Exit.ExitSuccess
 
 
-exitFailure : List P.Doc -> Task Never a
+exitFailure : List P.Doc -> Task Exit.ExitCode a
 exitFailure =
     exitWith (Exit.ExitFailure 1)
 
 
-exitWith : Exit.ExitCode -> List P.Doc -> Task Never a
+exitWith : Exit.ExitCode -> List P.Doc -> Task Exit.ExitCode a
 exitWith code docs =
     IO.hIsTerminalDevice IO.stderr
         |> Task.andThen
@@ -69,8 +69,8 @@ exitWith code docs =
                         (adjust (P.vcat (List.concatMap (\d -> [ d, P.text "" ]) docs)))
                     )
                     |> Task.andThen (\_ -> IO.hPutStrLn IO.stderr "")
-                    |> Task.andThen (\_ -> crash "Exit.exitWith code")
             )
+        |> Task.exitWith code
 
 
 getExeName : Task Never String
@@ -92,9 +92,10 @@ reflow string =
 -- HELP
 
 
-exitWithHelp : Maybe String -> String -> P.Doc -> Args -> Flags -> Task Never a
+exitWithHelp : Maybe String -> String -> P.Doc -> Args -> Flags -> Task Exit.ExitCode a
 exitWithHelp maybeCommand details example (Args args) flags =
     toCommand maybeCommand
+        |> Task.io
         |> Task.andThen
             (\command ->
                 exitSuccess <|
@@ -195,9 +196,10 @@ flagsToDocs flags docs =
 -- OVERVIEW
 
 
-exitWithOverview : P.Doc -> P.Doc -> List Command -> Task Never a
+exitWithOverview : P.Doc -> P.Doc -> List Command -> Task Exit.ExitCode a
 exitWithOverview intro outro commands =
     getExeName
+        |> Task.io
         |> Task.andThen
             (\exeName ->
                 exitSuccess
@@ -254,7 +256,7 @@ toCommandList exeName commands =
 -- UNKNOWN
 
 
-exitWithUnknown : String -> List String -> Task Never a
+exitWithUnknown : String -> List String -> Task Exit.ExitCode a
 exitWithUnknown unknown knowns =
     let
         nearbyKnowns : List ( Int, String )
@@ -279,6 +281,7 @@ exitWithUnknown unknown knowns =
                         ++ [ P.text "or", Prelude.last abcs, P.text "instead?" ]
     in
     getExeName
+        |> Task.io
         |> Task.andThen
             (\exeName ->
                 exitFailure
@@ -299,27 +302,28 @@ exitWithUnknown unknown knowns =
 -- ERROR TO DOC
 
 
-exitWithError : Error -> Task Never a
+exitWithError : Error -> Task Exit.ExitCode a
 exitWithError err =
-    Task.andThen exitFailure
-        (case err of
-            BadFlag flagError ->
-                flagErrorToDocs flagError
+    (case err of
+        BadFlag flagError ->
+            flagErrorToDocs flagError
 
-            BadArgs argErrors ->
-                case argErrors of
-                    [] ->
-                        Task.succeed
-                            [ reflow <| "I was not expecting any arguments for this command."
-                            , reflow <| "Try removing them?"
-                            ]
+        BadArgs argErrors ->
+            case argErrors of
+                [] ->
+                    Task.succeed
+                        [ reflow <| "I was not expecting any arguments for this command."
+                        , reflow <| "Try removing them?"
+                        ]
 
-                    [ argError ] ->
-                        argErrorToDocs argError
+                [ argError ] ->
+                    argErrorToDocs argError
 
-                    _ :: _ :: _ ->
-                        argErrorToDocs <| Prelude.head <| List.sortBy toArgErrorRank argErrors
-        )
+                _ :: _ :: _ ->
+                    argErrorToDocs <| Prelude.head <| List.sortBy toArgErrorRank argErrors
+    )
+        |> Task.io
+        |> Task.andThen exitFailure
 
 
 toArgErrorRank : ArgError -> Int

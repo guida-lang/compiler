@@ -32,9 +32,10 @@ import Utils.Task.Extra as Task
 -- APP
 
 
-app : D.Doc -> D.Doc -> List Command -> Task Never ()
+app : D.Doc -> D.Doc -> List Command -> Task Exit.ExitCode ()
 app intro outro commands =
     Env.getArgs
+        |> Task.io
         |> Task.andThen
             (\argStrings ->
                 case argStrings of
@@ -48,7 +49,7 @@ app intro outro commands =
                         IO.hPutStrLn IO.stdout
                             -- (V.toChars V.compiler)
                             "1.0.0-beta.2"
-                            |> Task.andThen (\_ -> crash "Exit.exitSuccess")
+                            |> Task.io
 
                     command :: chunks ->
                         case List.find (\cmd -> toName cmd == command) commands of

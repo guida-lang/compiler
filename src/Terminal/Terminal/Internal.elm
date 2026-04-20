@@ -14,6 +14,7 @@ module Terminal.Terminal.Internal exposing
     , toName
     )
 
+import System.Exit as Exit
 import Task exposing (Task)
 import Text.PrettyPrint.ANSI.Leijen exposing (Doc)
 
@@ -23,7 +24,7 @@ import Text.PrettyPrint.ANSI.Leijen exposing (Doc)
 
 
 type Command
-    = Command String Summary String Doc Args Flags (List String -> Result Error (Task Never ()))
+    = Command String Summary String Doc Args Flags (List String -> Result Error (Task Exit.ExitCode ()))
 
 
 toName : Command -> String

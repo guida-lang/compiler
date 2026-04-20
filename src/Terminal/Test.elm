@@ -52,12 +52,14 @@ type Flags
     = Flags (Maybe Int) (Maybe Int) (Maybe Report)
 
 
-run : List String -> Flags -> Task Never ()
+run : List String -> Flags -> Task Exit.ExitCode ()
 run paths flags =
     getStyle
+        |> Task.io
         |> Task.andThen
             (\style ->
                 Stuff.findRoot
+                    |> Task.io
                     |> Task.andThen
                         (\maybeRoot ->
                             Reporting.attemptWithStyle style Exit.testToReport <|
@@ -71,191 +73,211 @@ run paths flags =
             )
 
 
-runHelp : Stuff.Root -> List String -> Flags -> Task Never (Result Exit.Test ())
+runHelp : Stuff.Root -> List String -> Flags -> Task Exit.ExitCode (Result Exit.Test ())
 runHelp root testFileGlobs flags =
-    Stuff.withRootLock (Stuff.rootPath root) <|
-        Task.run <|
-            (Dir.createDirectoryIfMissing True (Stuff.testDir (Stuff.rootPath root))
-                |> Task.andThen (\_ -> Dir.getDirname)
-                |> Task.io
-                |> Task.andThen
-                    (\nodeDirname ->
-                        Task.eio Exit.TestBadOutline (Outline.read root)
-                            |> Task.andThen
-                                (\baseOutline ->
-                                    Task.io (Dir.doesDirectoryExist "tests")
-                                        |> Task.andThen
-                                            (\testsDirExists ->
-                                                Task.eio Exit.TestBadRegistry Solver.initEnv
-                                                    |> Task.andThen
-                                                        (\env ->
-                                                            let
-                                                                addOptionalTests : NE.Nonempty Outline.SrcDir -> NE.Nonempty Outline.SrcDir
-                                                                addOptionalTests =
-                                                                    if testsDirExists then
-                                                                        NE.cons (Outline.RelativeSrcDir "tests")
+    Stuff.withRootLock (Stuff.rootPath root)
+        (Dir.createDirectoryIfMissing True (Stuff.testDir (Stuff.rootPath root))
+            |> Task.andThen (\_ -> Dir.getDirname)
+            |> Task.io
+            |> Task.andThen
+                (\nodeDirname ->
+                    Task.eio (Ok << Exit.TestBadOutline) (Outline.read root)
+                        |> Task.andThen
+                            (\baseOutline ->
+                                Task.io (Dir.doesDirectoryExist "tests")
+                                    |> Task.andThen
+                                        (\testsDirExists ->
+                                            Task.eio (Ok << Exit.TestBadRegistry) Solver.initEnv
+                                                |> Task.andThen
+                                                    (\env ->
+                                                        let
+                                                            addOptionalTests : NE.Nonempty Outline.SrcDir -> NE.Nonempty Outline.SrcDir
+                                                            addOptionalTests =
+                                                                if testsDirExists then
+                                                                    NE.cons (Outline.RelativeSrcDir "tests")
 
-                                                                    else
-                                                                        identity
+                                                                else
+                                                                    identity
 
-                                                                newSrcDirs : NE.Nonempty Outline.SrcDir -> NE.Nonempty Outline.SrcDir
-                                                                newSrcDirs srcDirs =
-                                                                    srcDirs
-                                                                        |> addOptionalTests
-                                                                        |> NE.map
-                                                                            (\srcDir ->
-                                                                                case srcDir of
-                                                                                    Outline.AbsoluteSrcDir _ ->
-                                                                                        srcDir
+                                                            newSrcDirs : NE.Nonempty Outline.SrcDir -> NE.Nonempty Outline.SrcDir
+                                                            newSrcDirs srcDirs =
+                                                                srcDirs
+                                                                    |> addOptionalTests
+                                                                    |> NE.map
+                                                                        (\srcDir ->
+                                                                            case srcDir of
+                                                                                Outline.AbsoluteSrcDir _ ->
+                                                                                    srcDir
 
-                                                                                    Outline.RelativeSrcDir path ->
-                                                                                        Outline.RelativeSrcDir ("../../../" ++ path)
-                                                                            )
-                                                                        |> NE.cons (Outline.AbsoluteSrcDir (Utils.fpCombine nodeDirname "../libraries/test/src"))
-                                                                        |> NE.cons (Outline.RelativeSrcDir "src")
-                                                            in
-                                                            case baseOutline of
-                                                                Outline.App (Outline.GuidaAppOutline guida srcDirs depsDirect depsTrans testDirect testTrans) ->
-                                                                    Outline.GuidaAppOutline guida (newSrcDirs srcDirs) (Dict.union depsDirect testDirect) (Dict.union depsTrans testTrans) Dict.empty Dict.empty
-                                                                        |> makeAppPlan env Pkg.stdlib
-                                                                        -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
-                                                                        |> Task.andThen (attemptChanges root env)
-
-                                                                Outline.Pkg (Outline.GuidaPkgOutline _ _ _ _ _ deps test _) ->
-                                                                    Outline.GuidaAppOutline V.compiler (newSrcDirs (NE.singleton (Outline.RelativeSrcDir "src"))) Dict.empty Dict.empty Dict.empty Dict.empty
-                                                                        |> makePkgPlan env (Dict.union deps test)
-                                                                        |> Task.andThen (makeAppPlan env Pkg.stdlib)
-                                                                        -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
-                                                                        |> Task.andThen (attemptChanges root env)
-
-                                                                Outline.App (Outline.ElmAppOutline elm srcDirs depsDirect depsTrans testDirect testTrans) ->
-                                                                    Task.io (requireElmTestPackageApp root depsDirect testDirect)
-                                                                        |> Task.andThen
-                                                                            (\_ ->
-                                                                                Outline.ElmAppOutline elm (newSrcDirs srcDirs) (Dict.union depsDirect testDirect) (Dict.union depsTrans testTrans) Dict.empty Dict.empty
-                                                                                    |> makeAppPlan env Pkg.core
-                                                                                    |> Task.andThen (makeAppPlan env Pkg.json)
-                                                                                    |> Task.andThen (makeAppPlan env Pkg.time)
-                                                                                    |> Task.andThen (makeAppPlan env Pkg.random)
-                                                                                    -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
-                                                                                    |> Task.andThen (attemptChanges root env)
-                                                                            )
-
-                                                                Outline.Pkg (Outline.ElmPkgOutline _ _ _ _ _ deps test _) ->
-                                                                    Task.io (requireElmTestPackagePkg root deps test)
-                                                                        |> Task.andThen
-                                                                            (\_ ->
-                                                                                Outline.ElmAppOutline V.elmCompiler (newSrcDirs (NE.singleton (Outline.RelativeSrcDir "src"))) Dict.empty Dict.empty Dict.empty Dict.empty
-                                                                                    |> makePkgPlan env (Dict.union deps test)
-                                                                                    |> Task.andThen (makeAppPlan env Pkg.core)
-                                                                                    |> Task.andThen (makeAppPlan env Pkg.json)
-                                                                                    |> Task.andThen (makeAppPlan env Pkg.time)
-                                                                                    |> Task.andThen (makeAppPlan env Pkg.random)
-                                                                                    -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
-                                                                                    |> Task.andThen (attemptChanges root env)
-                                                                            )
-                                                        )
-                                            )
-                                )
-                            |> Task.andThen
-                                (\_ ->
-                                    let
-                                        paths : List String
-                                        paths =
-                                            case testFileGlobs of
-                                                [] ->
-                                                    [ Stuff.rootPath root ++ "/tests" ]
-
-                                                _ ->
-                                                    testFileGlobs
-                                    in
-                                    resolveElmFiles paths
-                                        |> Task.andThen
-                                            (\resolvedInputFiles ->
-                                                case resolvedInputFiles of
-                                                    Ok inputFiles ->
-                                                        inputFiles
-                                                            |> Utils.listTraverse
-                                                                (\inputFile ->
-                                                                    case List.filter (\path -> String.startsWith path inputFile) paths of
-                                                                        _ :: [] ->
-                                                                            extractExposedPossiblyTests inputFile
-                                                                                |> Task.map (Maybe.map (Tuple.pair inputFile))
-
-                                                                        _ ->
-                                                                            Task.succeed Nothing
-                                                                )
-
-                                                    Err _ ->
-                                                        Task.succeed []
-                                            )
-                                        |> Task.map (List.filterMap identity)
-                                        |> Task.andThen
-                                            (\exposedList ->
-                                                Dir.createDirectoryIfMissing True (Stuff.testDir (Stuff.rootPath root) ++ "/src/Test/Generated")
-                                                    |> Task.andThen
-                                                        (\_ ->
-                                                            let
-                                                                testModules : List { moduleName : String, possiblyTests : List String }
-                                                                testModules =
-                                                                    List.map
-                                                                        (\( _, ( moduleName, possiblyTests ) ) ->
-                                                                            { moduleName = moduleName
-                                                                            , possiblyTests = possiblyTests
-                                                                            }
+                                                                                Outline.RelativeSrcDir path ->
+                                                                                    Outline.RelativeSrcDir ("../../../" ++ path)
                                                                         )
-                                                                        exposedList
-                                                            in
-                                                            testGeneratedMain testModules testFileGlobs (List.map Tuple.first exposedList) flags
-                                                        )
-                                                    |> Task.andThen (IO.writeString (Stuff.testDir (Stuff.rootPath root) ++ "/src/Test/Generated/Main.elm"))
-                                                    |> Task.andThen (\_ -> Reporting.terminal)
-                                                    |> Task.andThen
-                                                        (\terminalStyle ->
-                                                            Reporting.attemptWithStyle terminalStyle Exit.testToReport <|
+                                                                    |> NE.cons (Outline.AbsoluteSrcDir (Utils.fpCombine nodeDirname "../libraries/test/src"))
+                                                                    |> NE.cons (Outline.RelativeSrcDir "src")
+                                                        in
+                                                        case baseOutline of
+                                                            Outline.App (Outline.GuidaAppOutline guida srcDirs depsDirect depsTrans testDirect testTrans) ->
+                                                                Outline.GuidaAppOutline guida (newSrcDirs srcDirs) (Dict.union depsDirect testDirect) (Dict.union depsTrans testTrans) Dict.empty Dict.empty
+                                                                    |> makeAppPlan env Pkg.stdlib
+                                                                    -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
+                                                                    |> Task.andThen (attemptChanges root env)
+                                                                    |> Task.mapError Ok
+
+                                                            Outline.Pkg (Outline.GuidaPkgOutline _ _ _ _ _ deps test _) ->
+                                                                Outline.GuidaAppOutline V.compiler (newSrcDirs (NE.singleton (Outline.RelativeSrcDir "src"))) Dict.empty Dict.empty Dict.empty Dict.empty
+                                                                    |> makePkgPlan env (Dict.union deps test)
+                                                                    |> Task.andThen (makeAppPlan env Pkg.stdlib)
+                                                                    -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
+                                                                    |> Task.andThen (attemptChanges root env)
+                                                                    |> Task.mapError Ok
+
+                                                            Outline.App (Outline.ElmAppOutline elm srcDirs depsDirect depsTrans testDirect testTrans) ->
+                                                                requireElmTestPackageApp root depsDirect testDirect
+                                                                    |> Task.mapError Err
+                                                                    |> Task.andThen
+                                                                        (\_ ->
+                                                                            Outline.ElmAppOutline elm (newSrcDirs srcDirs) (Dict.union depsDirect testDirect) (Dict.union depsTrans testTrans) Dict.empty Dict.empty
+                                                                                |> makeAppPlan env Pkg.core
+                                                                                |> Task.andThen (makeAppPlan env Pkg.json)
+                                                                                |> Task.andThen (makeAppPlan env Pkg.time)
+                                                                                |> Task.andThen (makeAppPlan env Pkg.random)
+                                                                                -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
+                                                                                |> Task.andThen (attemptChanges root env)
+                                                                                |> Task.mapError Ok
+                                                                        )
+
+                                                            Outline.Pkg (Outline.ElmPkgOutline _ _ _ _ _ deps test _) ->
+                                                                requireElmTestPackagePkg root deps test
+                                                                    |> Task.mapError Err
+                                                                    |> Task.andThen
+                                                                        (\_ ->
+                                                                            Outline.ElmAppOutline V.elmCompiler (newSrcDirs (NE.singleton (Outline.RelativeSrcDir "src"))) Dict.empty Dict.empty Dict.empty Dict.empty
+                                                                                |> makePkgPlan env (Dict.union deps test)
+                                                                                |> Task.andThen (makeAppPlan env Pkg.core)
+                                                                                |> Task.andThen (makeAppPlan env Pkg.json)
+                                                                                |> Task.andThen (makeAppPlan env Pkg.time)
+                                                                                |> Task.andThen (makeAppPlan env Pkg.random)
+                                                                                -- TODO changes should only be done to the `tests/elm.json` in case the top level `elm.json` had changes! This will improve performance!
+                                                                                |> Task.andThen (attemptChanges root env)
+                                                                                |> Task.mapError Ok
+                                                                        )
+                                                    )
+                                        )
+                            )
+                        |> Task.andThen
+                            (\_ ->
+                                let
+                                    paths : List String
+                                    paths =
+                                        case testFileGlobs of
+                                            [] ->
+                                                [ Stuff.rootPath root ++ "/tests" ]
+
+                                            _ ->
+                                                testFileGlobs
+                                in
+                                resolveElmFiles paths
+                                    |> Task.andThen
+                                        (\resolvedInputFiles ->
+                                            case resolvedInputFiles of
+                                                Ok inputFiles ->
+                                                    inputFiles
+                                                        |> Utils.listTraverse
+                                                            (\inputFile ->
+                                                                case List.filter (\path -> String.startsWith path inputFile) paths of
+                                                                    _ :: [] ->
+                                                                        extractExposedPossiblyTests inputFile
+                                                                            |> Task.map (Maybe.map (Tuple.pair inputFile))
+
+                                                                    _ ->
+                                                                        Task.succeed Nothing
+                                                            )
+
+                                                Err _ ->
+                                                    Task.succeed []
+                                        )
+                                    |> Task.map (List.filterMap identity)
+                                    |> Task.io
+                                    |> Task.andThen
+                                        (\exposedList ->
+                                            Dir.createDirectoryIfMissing True (Stuff.testDir (Stuff.rootPath root) ++ "/src/Test/Generated")
+                                                |> Task.andThen
+                                                    (\_ ->
+                                                        let
+                                                            testModules : List { moduleName : String, possiblyTests : List String }
+                                                            testModules =
+                                                                List.map
+                                                                    (\( _, ( moduleName, possiblyTests ) ) ->
+                                                                        { moduleName = moduleName
+                                                                        , possiblyTests = possiblyTests
+                                                                        }
+                                                                    )
+                                                                    exposedList
+                                                        in
+                                                        testGeneratedMain testModules testFileGlobs (List.map Tuple.first exposedList) flags
+                                                    )
+                                                |> Task.andThen (IO.writeString (Stuff.testDir (Stuff.rootPath root) ++ "/src/Test/Generated/Main.elm"))
+                                                |> Task.andThen (\_ -> Reporting.terminal)
+                                                |> Task.io
+                                                |> Task.andThen
+                                                    (\terminalStyle ->
+                                                        Reporting.attemptWithStyle terminalStyle Exit.testToReport <|
+                                                            Task.io <|
                                                                 Dir.withCurrentDirectory (Stuff.testDir (Stuff.rootPath root))
                                                                     (runMake (Stuff.rootMap Stuff.testDir root) "src/Test/Generated/Main.elm")
-                                                        )
-                                                    |> Task.andThen
-                                                        (\content ->
-                                                            IO.hPutStrLn IO.stdout "Starting tests"
-                                                                |> Task.andThen (\_ -> getInterpreter)
-                                                                |> Task.andThen
-                                                                    (\interpreter ->
-                                                                        let
-                                                                            varName : String
-                                                                            varName =
-                                                                                case root of
-                                                                                    Stuff.GuidaRoot _ ->
-                                                                                        "Guida"
+                                                    )
+                                                |> Task.andThen
+                                                    (\content ->
+                                                        IO.hPutStrLn IO.stdout "Starting tests"
+                                                            |> Task.io
+                                                            |> Task.andThen (\_ -> getInterpreter)
+                                                            |> Task.andThen
+                                                                (\interpreter ->
+                                                                    let
+                                                                        varName : String
+                                                                        varName =
+                                                                            case root of
+                                                                                Stuff.GuidaRoot _ ->
+                                                                                    "Guida"
 
-                                                                                    Stuff.ElmRoot _ _ ->
-                                                                                        "Elm"
+                                                                                Stuff.ElmRoot _ _ ->
+                                                                                    "Elm"
 
-                                                                            finalContent : String
-                                                                            finalContent =
-                                                                                before
-                                                                                    ++ "\nvar "
-                                                                                    ++ varName
-                                                                                    ++ " = (function(module) {\n"
-                                                                                    ++ addKernelTestChecking (Stuff.rootToTarget root) content
-                                                                                    ++ "\nreturn this."
-                                                                                    ++ varName
-                                                                                    ++ ";\n})({});\n"
-                                                                                    ++ after (Stuff.rootToTarget root)
-                                                                        in
-                                                                        interpret interpreter finalContent
-                                                                    )
-                                                        )
-                                            )
-                                        |> Task.io
-                                )
-                            |> Task.void
-                    )
+                                                                        finalContent : String
+                                                                        finalContent =
+                                                                            before
+                                                                                ++ "\nvar "
+                                                                                ++ varName
+                                                                                ++ " = (function(module) {\n"
+                                                                                ++ addKernelTestChecking (Stuff.rootToTarget root) content
+                                                                                ++ "\nreturn this."
+                                                                                ++ varName
+                                                                                ++ ";\n})({});\n"
+                                                                                ++ after (Stuff.rootToTarget root)
+                                                                    in
+                                                                    interpret interpreter finalContent
+                                                                        |> Task.io
+                                                                )
+                                                    )
+                                                |> Task.mapError Err
+                                        )
+                            )
+                        |> Task.void
+                )
+        )
+        |> Task.map Ok
+        |> Task.onError
+            (\res ->
+                case res of
+                    Err exitCode ->
+                        Task.fail exitCode
+
+                    Ok exitTest ->
+                        Task.succeed (Err exitTest)
             )
 
 
-requireElmTestPackageApp : Stuff.Root -> Dict ( String, String ) Pkg.Name V.Version -> Dict ( String, String ) Pkg.Name V.Version -> Task Never ()
+requireElmTestPackageApp : Stuff.Root -> Dict ( String, String ) Pkg.Name V.Version -> Dict ( String, String ) Pkg.Name V.Version -> Task Exit.ExitCode ()
 requireElmTestPackageApp root depsDirect testDirect =
     case Maybe.or (Dict.get identity Pkg.test testDirect) (Dict.get identity Pkg.test depsDirect) of
         Just (V.Version 2 _ _) ->
@@ -263,14 +285,14 @@ requireElmTestPackageApp root depsDirect testDirect =
 
         Just version ->
             IO.hPutStrLn IO.stderr (Stuff.rootProjectFilePath root ++ "\nThis version of guida-test only supports " ++ Pkg.toChars Pkg.test ++ " 2.x, but you have " ++ V.toChars version ++ ".")
-                |> Task.andThen (\_ -> crash "Exit.exitFailure")
+                |> Task.exitWith (Exit.ExitFailure 1)
 
         Nothing ->
             IO.hPutStrLn IO.stderr (Stuff.rootProjectFilePath root ++ "\nYou must have \"" ++ Pkg.toChars Pkg.test ++ "\" in your \"test-dependencies\" or \"dependencies\" to run guida-test.")
-                |> Task.andThen (\_ -> crash "Exit.exitFailure")
+                |> Task.exitWith (Exit.ExitFailure 1)
 
 
-requireElmTestPackagePkg : Stuff.Root -> Dict ( String, String ) Pkg.Name C.Constraint -> Dict ( String, String ) Pkg.Name C.Constraint -> Task Never ()
+requireElmTestPackagePkg : Stuff.Root -> Dict ( String, String ) Pkg.Name C.Constraint -> Dict ( String, String ) Pkg.Name C.Constraint -> Task Exit.ExitCode ()
 requireElmTestPackagePkg root deps test =
     case Maybe.or (Dict.get identity Pkg.test deps) (Dict.get identity Pkg.test test) of
         Just range ->
@@ -280,11 +302,11 @@ requireElmTestPackagePkg root deps test =
 
                 _ ->
                     IO.hPutStrLn IO.stderr (Stuff.rootProjectFilePath root ++ "\nThis version of guida-test only supports " ++ Pkg.toChars Pkg.test ++ " 2.x, but you have " ++ C.toChars range ++ ".")
-                        |> Task.andThen (\_ -> crash "Exit.exitFailure")
+                        |> Task.exitWith (Exit.ExitFailure 1)
 
         Nothing ->
             IO.hPutStrLn IO.stderr (Stuff.rootProjectFilePath root ++ "\nYou must have \"" ++ Pkg.toChars Pkg.test ++ "\" in your \"test-dependencies\" or \"dependencies\" to run guida-test.")
-                |> Task.andThen (\_ -> crash "Exit.exitFailure")
+                |> Task.exitWith (Exit.ExitFailure 1)
 
 
 interpret : FilePath -> String -> Task Never Exit.ExitCode
@@ -1212,7 +1234,7 @@ makePkgPlanHelp ((Solver.Env cache _ connection registry) as env) cons outline =
 -- GET INTERPRETER
 
 
-getInterpreter : Task Never FilePath
+getInterpreter : Task Exit.ExitCode FilePath
 getInterpreter =
     getInterpreterHelp "node` or `nodejs" <|
         (Dir.findExecutable "node"
@@ -1224,9 +1246,10 @@ getInterpreter =
         )
 
 
-getInterpreterHelp : String -> Task Never (Maybe FilePath) -> Task Never FilePath
+getInterpreterHelp : String -> Task Never (Maybe FilePath) -> Task Exit.ExitCode FilePath
 getInterpreterHelp name findExe =
     findExe
+        |> Task.io
         |> Task.andThen
             (\maybePath ->
                 case maybePath of
@@ -1235,7 +1258,7 @@ getInterpreterHelp name findExe =
 
                     Nothing ->
                         IO.hPutStrLn IO.stderr (exeNotFound name)
-                            |> Task.andThen (\_ -> crash "Exit.exitFailure")
+                            |> Task.exitWith (Exit.ExitFailure 1)
             )
 
 

@@ -28,6 +28,7 @@ import Compiler.Reporting.Doc as D
 import Compiler.Reporting.Render.Type as Type
 import Compiler.Reporting.Render.Type.Localizer as L
 import Data.Map as Dict
+import System.Exit as Exit
 import Task exposing (Task)
 import Utils.Task.Extra as Task
 
@@ -43,7 +44,7 @@ type Args
     | GlobalInquiry Pkg.Name V.Version V.Version
 
 
-run : Args -> () -> Task Never ()
+run : Args -> () -> Task Exit.ExitCode ()
 run args () =
     Reporting.attempt Exit.diffToReport <|
         Task.run

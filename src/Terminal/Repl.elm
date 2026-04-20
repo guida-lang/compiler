@@ -61,10 +61,11 @@ type Flags
     = Flags (Maybe FilePath) Bool
 
 
-run : () -> Flags -> Task Never ()
+run : () -> Flags -> Task Exit.ExitCode ()
 run () flags =
     printWelcomeMessage
         |> Task.andThen (\_ -> initSettings)
+        |> Task.io
         |> Task.andThen
             (\settings ->
                 initEnv flags
@@ -76,7 +77,8 @@ run () flags =
                                     Utils.replRunInputT settings (Utils.replWithInterrupt (loop env IO.initialReplState))
                             in
                             State.evalStateT looper IO.initialReplState
-                                |> Task.andThen (\exitCode -> crash "Exit.exitWith exitCode")
+                                |> Task.io
+                                |> Task.andThen (\exitCode -> Task.fail exitCode)
                         )
             )
 
@@ -123,9 +125,9 @@ type Env
     = Env Stuff.Root FilePath Bool
 
 
-initEnv : Flags -> Task Never Env
+initEnv : Flags -> Task Exit.ExitCode Env
 initEnv (Flags maybeAlternateInterpreter noColors) =
-    getRoot
+    Task.io getRoot
         |> Task.andThen
             (\root ->
                 getInterpreter maybeAlternateInterpreter
@@ -762,7 +764,7 @@ defaultDeps =
 -- GET INTERPRETER
 
 
-getInterpreter : Maybe String -> Task Never FilePath
+getInterpreter : Maybe String -> Task Exit.ExitCode FilePath
 getInterpreter maybeName =
     case maybeName of
         Just name ->
@@ -779,9 +781,9 @@ getInterpreter maybeName =
                 )
 
 
-getInterpreterHelp : String -> Task Never (Maybe FilePath) -> Task Never FilePath
+getInterpreterHelp : String -> Task Never (Maybe FilePath) -> Task Exit.ExitCode FilePath
 getInterpreterHelp name findExe =
-    findExe
+    Task.io findExe
         |> Task.andThen
             (\maybePath ->
                 case maybePath of
@@ -790,7 +792,7 @@ getInterpreterHelp name findExe =
 
                     Nothing ->
                         IO.hPutStrLn IO.stderr (exeNotFound name)
-                            |> Task.andThen (\_ -> crash "Exit.exitFailure")
+                            |> Task.exitWith (Exit.ExitFailure 1)
             )
 
 

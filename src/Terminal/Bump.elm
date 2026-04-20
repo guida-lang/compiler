@@ -19,6 +19,7 @@ import Compiler.Guida.Magnitude as M
 import Compiler.Guida.Version as V
 import Compiler.Reporting.Doc as D
 import Prelude
+import System.Exit as Exit
 import System.IO as IO
 import Task exposing (Task)
 import Utils.Main as Utils
@@ -30,7 +31,7 @@ import Utils.Task.Extra as Task
 -- RUN
 
 
-run : () -> () -> Task Never ()
+run : () -> () -> Task Exit.ExitCode ()
 run () () =
     Reporting.attempt Exit.bumpToReport <|
         Task.run (Task.andThen bump getEnv)

@@ -67,9 +67,9 @@ terminal =
 -- ATTEMPT
 
 
-attempt : (x -> Help.Report) -> Task Never (Result x a) -> Task Never a
+attempt : (x -> Help.Report) -> Task Never (Result x a) -> Task Exit.ExitCode a
 attempt toReport work =
-    work
+    Task.io work
         -- |> IO.catch reportExceptionsNicely
         |> Task.andThen
             (\result ->
@@ -79,11 +79,11 @@ attempt toReport work =
 
                     Err x ->
                         Exit.toStderr (toReport x)
-                            |> Task.andThen (\_ -> crash "Exit.exitFailure")
+                            |> Task.exitWith (Exit.ExitFailure 1)
             )
 
 
-attemptWithStyle : Style -> (x -> Help.Report) -> Task Never (Result x a) -> Task Never a
+attemptWithStyle : Style -> (x -> Help.Report) -> Task Exit.ExitCode (Result x a) -> Task Exit.ExitCode a
 attemptWithStyle style toReport work =
     work
         -- |> IO.catch reportExceptionsNicely
@@ -96,16 +96,16 @@ attemptWithStyle style toReport work =
                     Err x ->
                         case style of
                             Silent ->
-                                crash "Exit.exitFailure"
+                                Task.fail (Exit.ExitFailure 1)
 
                             Json ->
                                 Utils.builderHPutBuilder IO.stderr (Encode.encodeUgly (Exit.toJson (toReport x)))
-                                    |> Task.andThen (\_ -> crash "Exit.exitFailure")
+                                    |> Task.exitWith (Exit.ExitFailure 1)
 
                             Terminal mvar ->
                                 MVar.readMVar mvar
                                     |> Task.andThen (\_ -> Exit.toStderr (toReport x))
-                                    |> Task.andThen (\_ -> crash "Exit.exitFailure")
+                                    |> Task.exitWith (Exit.ExitFailure 1)
             )
 
 

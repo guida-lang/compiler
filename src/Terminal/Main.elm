@@ -27,13 +27,10 @@ import Utils.Task.Extra as Task
 
 main : IO.Program
 main =
-    IO.run
-        (app
-            |> Task.andThen (\() -> crash "Exit.exitSuccess")
-        )
+    IO.run app
 
 
-app : Task Never ()
+app : Task Exit.ExitCode ()
 app =
     Terminal.app intro
         outro

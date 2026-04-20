@@ -30,27 +30,28 @@ type Flags
     = Flags (Maybe FilePath) Bool Bool Bool
 
 
-run : List String -> Flags -> Task Never ()
+run : List String -> Flags -> Task Exit.ExitCode ()
 run paths ((Flags _ autoYes _ _) as flags) =
     resolveGuidaAndElmFiles paths
+        |> Task.io
         |> Task.andThen
             (\resolvedInputFiles ->
                 case determineWhatToDoFromConfig flags resolvedInputFiles of
                     Err err ->
                         IO.hPutStrLn IO.stderr (toConsoleErrorMessage err)
-                            |> Task.andThen (\_ -> crash "Exit.exitFailure")
+                            |> Task.exitWith (Exit.ExitFailure 1)
 
                     Ok a ->
                         Task.succeed a
             )
-        |> Task.andThen (\whatToDo -> doIt autoYes whatToDo)
+        |> Task.andThen (\whatToDo -> Task.io (doIt autoYes whatToDo))
         |> Task.andThen
             (\result ->
                 if result then
                     Task.succeed ()
 
                 else
-                    crash "Exit.exitFailure"
+                    Task.fail (Exit.ExitFailure 1)
             )
 
 

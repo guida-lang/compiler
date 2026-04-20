@@ -25,6 +25,7 @@ import Compiler.Generate.Html as Html
 import Compiler.Guida.ModuleName as ModuleName
 import Maybe.Extra as Maybe
 import System.Directory as Dir
+import System.Exit as Exit
 import Task exposing (Task)
 import Terminal.Terminal.Internal exposing (Parser(..))
 import Utils.Main as Utils exposing (FilePath)
@@ -53,18 +54,21 @@ type ReportType
 -- RUN
 
 
-run : List String -> Flags -> Task Never ()
+run : List String -> Flags -> Task Exit.ExitCode ()
 run paths ((Flags _ _ _ _ report _) as flags) =
     getStyle report
+        |> Task.io
         |> Task.andThen
             (\style ->
                 Stuff.findRoot
+                    |> Task.io
                     |> Task.andThen
                         (\maybeRoot ->
                             Reporting.attemptWithStyle style Exit.makeToReport <|
                                 case maybeRoot of
                                     Just root ->
                                         runHelp root paths style flags
+                                            |> Task.io
 
                                     Nothing ->
                                         Task.succeed (Err Exit.MakeNoOutline)

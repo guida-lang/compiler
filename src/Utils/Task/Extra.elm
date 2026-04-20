@@ -1,6 +1,7 @@
 module Utils.Task.Extra exposing
     ( apply
     , eio
+    , exitWith
     , io
     , mapM
     , mio
@@ -8,6 +9,7 @@ module Utils.Task.Extra exposing
     , void
     )
 
+import System.Exit as Exit
 import Task exposing (Task)
 
 
@@ -20,6 +22,13 @@ run task =
     task
         |> Task.map Ok
         |> Task.onError (Err >> Task.succeed)
+
+
+exitWith : Exit.ExitCode -> Task Never a -> Task Exit.ExitCode b
+exitWith code work =
+    work
+        |> Task.mapError never
+        |> Task.andThen (\_ -> Task.fail code)
 
 
 

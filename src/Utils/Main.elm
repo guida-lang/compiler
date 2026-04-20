@@ -702,15 +702,17 @@ type LockSharedExclusive
     = LockExclusive
 
 
-lockWithFileLock : String -> LockSharedExclusive -> (() -> Task Never a) -> Task Never a
+lockWithFileLock : String -> LockSharedExclusive -> (() -> Task x a) -> Task x a
 lockWithFileLock path mode ioFunc =
     case mode of
         LockExclusive ->
             lockFile path
+                |> Task.io
                 |> Task.andThen ioFunc
                 |> Task.andThen
                     (\a ->
                         unlockFile path
+                            |> Task.io
                             |> Task.map (\_ -> a)
                     )
 

@@ -40,7 +40,7 @@ import Utils.Task.Extra as Task
 {-| TODO mandate no "exposing (..)" in packages to make
 optimization to skip builds in Guida.Details always valid
 -}
-run : () -> () -> Task Never ()
+run : () -> () -> Task Exit.ExitCode ()
 run () () =
     Reporting.attempt Exit.publishToReport <|
         Task.run (Task.andThen publish getEnv)

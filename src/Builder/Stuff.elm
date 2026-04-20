@@ -222,7 +222,7 @@ findRootIn path =
 -- LOCKS
 
 
-withRootLock : String -> Task Never a -> Task Never a
+withRootLock : String -> Task x a -> Task x a
 withRootLock root work =
     let
         dir : String
@@ -230,6 +230,7 @@ withRootLock root work =
             stuff root
     in
     Dir.createDirectoryIfMissing True dir
+        |> Task.io
         |> Task.andThen
             (\_ ->
                 Utils.lockWithFileLock (dir ++ "/lock") Utils.LockExclusive (\_ -> work)

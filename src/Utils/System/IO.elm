@@ -27,11 +27,6 @@ module Utils.System.IO exposing
 @docs hIsTerminalDevice
 
 
-# Special cases for standard input and output
-
-@docs putStr, putStrLn
-
-
 # Repl State
 
 @docs ReplState, initialReplState
@@ -46,6 +41,7 @@ module Utils.System.IO exposing
 import Dict exposing (Dict)
 import Http
 import Json.Decode as Decode
+import System.Exit as Exit
 import System.IO as IO
 import System.Misc as Misc
 import Task exposing (Task)
@@ -56,10 +52,10 @@ type alias Program =
     Platform.Program () Model Msg
 
 
-run : Task Never () -> Program
+run : Task Exit.ExitCode () -> Program
 run app =
     Platform.worker
-        { init = update app
+        { init = update (TaskMsg app)
         , update = update
         , subscriptions = \_ -> Sub.none
         }
@@ -69,13 +65,22 @@ type alias Model =
     ()
 
 
-type alias Msg =
-    Task Never ()
+type Msg
+    = TaskMsg (Task Exit.ExitCode ())
+    | ExitMsg (Result Exit.ExitCode ())
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg () =
-    ( (), Task.perform Task.succeed msg )
+    case msg of
+        TaskMsg task ->
+            ( (), Task.attempt ExitMsg task )
+
+        ExitMsg (Ok ()) ->
+            ( (), Exit.exitSuccess )
+
+        ExitMsg (Err exitCode) ->
+            ( (), Exit.exitWith exitCode )
 
 
 

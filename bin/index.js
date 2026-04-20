@@ -1,17 +1,10 @@
 #!/usr/bin/env node
 
 const fs = require("node:fs");
-const readline = require("node:readline");
 const http = require("node:http");
 const https = require("node:https");
 const zlib = require("node:zlib");
-const FormData = require("form-data");
 const { newServer } = require("mock-xmlhttprequest");
-
-const rl = readline.createInterface({
-  input: process.stdin,
-  output: process.stdout,
-});
 
 let stateT = { imports: {}, types: {}, decls: {} };
 const lockedFiles = {};
@@ -44,7 +37,6 @@ server.post("unlockFile", (request) => {
     request.respond(200);
   } else {
     console.error(`Could not find locked file "${path}"!`);
-    rl.close();
     process.exit(255);
   }
 });
@@ -117,6 +109,6 @@ server.setDefaultHandler((request) => {
 
 server.install();
 
-const { Guida } = require("./guida.min.js");
+const { Guida } = require("./guida.js");
 
 Guida.Terminal.Main.init();

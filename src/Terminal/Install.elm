@@ -18,6 +18,7 @@ import Compiler.Guida.Package as Pkg
 import Compiler.Guida.Version as V
 import Compiler.Reporting.Doc as D
 import Data.Map as Dict exposing (Dict)
+import System.Exit as Exit
 import System.IO as IO
 import Task exposing (Task)
 import Utils.Main as Utils
@@ -38,7 +39,7 @@ type Flags
     = Flags Bool Bool
 
 
-run : Args -> Flags -> Task Never ()
+run : Args -> Flags -> Task Exit.ExitCode ()
 run args (Flags forTest autoYes) =
     Reporting.attempt Exit.installToReport <|
         (Stuff.findRoot
