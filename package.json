@@ -32,6 +32,7 @@
     "form-data": "^4.0.2",
     "jszip": "^3.10.1",
     "mock-xmlhttprequest": "^8.4.1",
+    "os-lock": "^2.0.0",
     "tmp": "^0.2.3",
     "which": "^5.0.0"
   },

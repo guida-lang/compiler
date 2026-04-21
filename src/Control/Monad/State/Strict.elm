@@ -69,30 +69,9 @@ pure value =
 
 get : StateT s IO.ReplState
 get =
-    liftIO
-        (Impure.task "getStateT"
-            []
-            Impure.EmptyBody
-            (Impure.DecoderResolver
-                (Decode.map3 (\imports types decls -> IO.ReplState imports types decls)
-                    (Decode.field "imports" (Decode.dict Decode.string))
-                    (Decode.field "types" (Decode.dict Decode.string))
-                    (Decode.field "decls" (Decode.dict Decode.string))
-                )
-            )
-        )
+    liftIO (Task.succeed IO.initialReplState)
 
 
 put : IO.ReplState -> Task Never ()
 put (IO.ReplState imports types decls) =
-    Impure.task "putStateT"
-        []
-        (Impure.JsonBody
-            (Encode.object
-                [ ( "imports", Encode.dict identity Encode.string imports )
-                , ( "types", Encode.dict identity Encode.string types )
-                , ( "decls", Encode.dict identity Encode.string decls )
-                ]
-            )
-        )
-        (Impure.Always ())
+    Task.succeed ()

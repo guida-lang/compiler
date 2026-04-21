@@ -706,31 +706,15 @@ lockWithFileLock : String -> LockSharedExclusive -> (() -> Task x a) -> Task x a
 lockWithFileLock path mode ioFunc =
     case mode of
         LockExclusive ->
-            lockFile path
+            Misc.lockFile path
                 |> Task.io
                 |> Task.andThen ioFunc
                 |> Task.andThen
                     (\a ->
-                        unlockFile path
+                        Misc.unlockFile path
                             |> Task.io
                             |> Task.map (\_ -> a)
                     )
-
-
-lockFile : FilePath -> Task Never ()
-lockFile path =
-    Impure.task "lockFile"
-        []
-        (Impure.StringBody path)
-        (Impure.Always ())
-
-
-unlockFile : FilePath -> Task Never ()
-unlockFile path =
-    Impure.task "unlockFile"
-        []
-        (Impure.StringBody path)
-        (Impure.Always ())
 
 
 
@@ -850,18 +834,21 @@ builderHPutBuilder =
 
 binaryDecodeFileOrFail : BD.Decoder a -> FilePath -> Task Never (Result ( Int, String ) a)
 binaryDecodeFileOrFail decoder filename =
-    Impure.task "binaryDecodeFileOrFail"
-        []
-        (Impure.StringBody filename)
-        (Impure.BytesResolver (BD.map Ok decoder))
+    Misc.binaryDecodeFileOrFail filename
+        |> Task.map
+            (\content ->
+                case BD.decode decoder content of
+                    Just value ->
+                        Ok value
+
+                    Nothing ->
+                        crash "Decoding bytes error..."
+            )
 
 
 binaryEncodeFile : (a -> BE.Encoder) -> FilePath -> a -> Task Never ()
 binaryEncodeFile toEncoder path value =
-    Impure.task "write"
-        [ Http.header "path" path ]
-        (Impure.BytesBody (toEncoder value))
-        (Impure.Always ())
+    Misc.binaryEncodeFile path (BE.encode (toEncoder value))
 
 
 
