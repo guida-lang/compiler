@@ -90,6 +90,30 @@ suite =
 `);
     });
 
+    it("make - reports warnings", async () => {
+        const tmpobj = tmp.dirSync();
+        process.chdir(tmpobj.name);
+
+        await guida.init(config(), { package: false });
+
+        fs.writeFileSync(path.join(tmpobj.name, "src", "Main.guida"), `module Main exposing (main)
+
+main : Program () () ()
+main =
+    Platform.worker
+        { init = \\_ -> ( (), Cmd.none )
+        , update = \\_ model -> ( model, Cmd.none )
+        , subscriptions = \\_ -> Sub.none
+        }
+
+noTypeAnnotationFn unusedVar = 1
+`);
+
+        const result = await guida.make(config(), path.join(tmpobj.name, "src", "Main.guida"));
+        expect(result).toHaveProperty("output", expect.any(String));
+        expect(result).toHaveProperty("warnings", expect.any(Array));
+    });
+
     it.skip("getDefinitionLocation - simple example", async () => {
         const tmpobj = tmp.dirSync();
         process.chdir(tmpobj.name);

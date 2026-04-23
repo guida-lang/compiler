@@ -10,6 +10,7 @@ module Builder.Stuff exposing
     , getReplCache
     , guidai
     , guidao
+    , guidaw
     , interfaces
     , isRootGuida
     , objects
@@ -87,6 +88,11 @@ compilerVersion =
 guidai : String -> ModuleName.Raw -> String
 guidai root name =
     toArtifactPath root name "guidai"
+
+
+guidaw : String -> ModuleName.Raw -> String
+guidaw root name =
+    toArtifactPath root name "guidaw"
 
 
 guidao : String -> ModuleName.Raw -> String
