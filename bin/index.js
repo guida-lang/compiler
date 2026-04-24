@@ -14,6 +14,7 @@ const which = require("which");
 const tmp = require("tmp");
 const FormData = require("form-data");
 const { newServer } = require("mock-xmlhttprequest");
+const { lock, unlock } = require("os-lock");
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -23,7 +24,6 @@ const rl = readline.createInterface({
 let nextCounter = 0, mVarsNextCounter = 0;
 let stateT = { imports: {}, types: {}, decls: {} };
 const mVars = {};
-const lockedFiles = {};
 const processes = {};
 
 const download = function (method, url) {
@@ -252,32 +252,21 @@ server.post("dirCreateDirectoryIfMissing", (request) => {
 server.post("lockFile", (request) => {
   const path = request.body;
 
-  if (lockedFiles[path]) {
-    lockedFiles[path].subscribers.push(request);
-  } else {
-    lockedFiles[path] = { subscribers: [] };
+  fs.open(path, 'a+', async (err, fd) => {
+    if (err) throw err;
+    await lock(fd, { exclusive: true });
     request.respond(200);
-  }
+  });
 });
 
 server.post("unlockFile", (request) => {
   const path = request.body;
 
-  if (lockedFiles[path]) {
-    const subscriber = lockedFiles[path].subscribers.shift();
-
-    if (subscriber) {
-      subscriber.respond(200);
-    } else {
-      delete lockedFiles[path];
-    }
-
+  fs.open(path, async (err, fd) => {
+    if (err) throw err;
+    await unlock(fd);
     request.respond(200);
-  } else {
-    console.error(`Could not find locked file "${path}"!`);
-    rl.close();
-    process.exit(255);
-  }
+  });
 });
 
 server.post("dirGetModificationTime", (request) => {

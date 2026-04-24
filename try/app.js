@@ -2,6 +2,7 @@ const guida = require("guida");
 
 const { createFs } = require("indexeddb-fs");
 const fs = createFs({ databaseName: "guida-fs" });
+const lockedFiles = {};
 
 const config = {
     env: {},
@@ -11,7 +12,29 @@ const config = {
     createDirectory: fs.createDirectory,
     readDirectory: fs.readDirectory,
     getCurrentDirectory: async () => "root",
-    homedir: async () => "root"
+    homedir: async () => "root",
+    lockFile: async (path, request) => {
+        if (lockedFiles[path]) {
+            lockedFiles[path].subscribers.push(request);
+        } else {
+            lockedFiles[path] = { subscribers: [] };
+        }
+    },
+    unlockFile: async (path, request) => {
+        if (lockedFiles[path]) {
+            const subscriber = lockedFiles[path].subscribers.shift();
+
+            if (subscriber) {
+                subscriber.respond(200);
+            } else {
+                delete lockedFiles[path];
+            }
+
+            request.respond(200);
+        } else {
+            console.error(`Could not find locked file "${path}"!`);
+        }
+    }
 };
 
 const defaultGuidaJson = `{

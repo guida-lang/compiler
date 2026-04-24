@@ -23,6 +23,12 @@ export interface GuidaConfig {
     // Returns the string path of the current user's home directory.
     homedir(): Promise<string>;
 
+    // Lock a file to prevent concurrent modifications.
+    lockFile(path: string, request: any): Promise<void>;
+
+    // Unlock a previously locked file.
+    unlockFile(path: string, request: any): Promise<void>;
+
     // Environment map used by the runner.
     env?: Record<string, any>;
 }
