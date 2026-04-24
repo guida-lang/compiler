@@ -49,7 +49,7 @@ type Expr
     | Chr A.Region String
     | Str A.Region String
     | Int A.Region Int
-    | Float A.Region Float
+    | Float A.Region String
     | VarLocal Name
     | TrackedVarLocal A.Region Name
     | VarGlobal A.Region Global
@@ -523,7 +523,7 @@ exprEncoder expr =
             BE.sequence
                 [ BE.unsignedInt8 4
                 , A.regionEncoder region
-                , BE.float value
+                , BE.string value
                 ]
 
         VarLocal value ->
@@ -738,7 +738,7 @@ exprDecoder =
                     4 ->
                         BD.map2 Float
                             A.regionDecoder
-                            BD.float
+                            BD.string
 
                     5 ->
                         BD.map VarLocal BD.string

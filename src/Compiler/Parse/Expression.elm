@@ -65,8 +65,8 @@ number syntaxVersion start =
                         Number.Int int src ->
                             Src.Int int src
 
-                        Number.Float float src ->
-                            Src.Float float src
+                        Number.Float float ->
+                            Src.Float float
             )
 
 

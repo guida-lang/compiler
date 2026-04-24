@@ -94,7 +94,7 @@ type Expr_
     | Chr String
     | Str String
     | Int Int
-    | Float Float
+    | Float String
     | List (List Expr)
     | Negate Expr
     | Binop Name IO.Canonical Name Annotation Expr Expr -- CACHE real name for optimization
@@ -681,7 +681,7 @@ expr_Encoder expr_ =
         Float float ->
             BE.sequence
                 [ BE.unsignedInt8 10
-                , BE.float float
+                , BE.string float
                 ]
 
         List entries ->
@@ -858,7 +858,7 @@ expr_Decoder =
                         BD.map Int BD.int
 
                     10 ->
-                        BD.map Float BD.float
+                        BD.map Float BD.string
 
                     11 ->
                         BD.map List (BD.list exprDecoder)

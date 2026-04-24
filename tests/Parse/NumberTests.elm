@@ -49,39 +49,42 @@ suite =
                 [ Test.test "No underscores 1000.42" <|
                     \_ ->
                         singleNumber SV.Guida "1000.42"
-                            |> Expect.equal (Ok (N.Float 1000.42 "1000.42"))
+                            |> Expect.equal (Ok (N.Float "1000.42"))
                 , Test.test "Exponent and no underscores 6.022e23" <|
                     \_ ->
                         singleNumber SV.Guida "6.022e23"
-                            |> Expect.equal (Ok (N.Float 6.022e23 "6.022e23"))
+                            |> Expect.equal (Ok (N.Float "6.022e23"))
+                , Test.test "Exponent with decimal point is invalid 6.022e23.0" <|
+                    \_ ->
+                        expectErrAtPosition 9 SV.Guida "6.022e23.0" (E.NumberEnd SV.Guida)
                 , Test.test "Exponent and +/- and no underscores 6000.022e+36" <|
                     \_ ->
                         singleNumber SV.Guida "6000.022e+36"
-                            |> Expect.equal (Ok (N.Float 6.000022e39 "6000.022e+36"))
+                            |> Expect.equal (Ok (N.Float "6000.022e+36"))
                 , Test.test "Underscore before decimal point 111_000.602" <|
                     \_ ->
                         singleNumber SV.Guida "111_000.602"
-                            |> Expect.equal (Ok (N.Float 111000.602 "111_000.602"))
+                            |> Expect.equal (Ok (N.Float "111_000.602"))
                 , Test.test "Underscore after decimal point 1000.4_205" <|
                     \_ ->
                         singleNumber SV.Guida "1000.4_205"
-                            |> Expect.equal (Ok (N.Float 1000.4205 "1000.4_205"))
+                            |> Expect.equal (Ok (N.Float "1000.4_205"))
                 , Test.test "Underscore before and after decimal point 1_000.4_205" <|
                     \_ ->
                         singleNumber SV.Guida "1_000.4_205"
-                            |> Expect.equal (Ok (N.Float 1000.4205 "1_000.4_205"))
+                            |> Expect.equal (Ok (N.Float "1_000.4_205"))
                 , Test.test "Underscore before decimal point and exponent 60_000.022e3" <|
                     \_ ->
                         singleNumber SV.Guida "60_000.022e3"
-                            |> Expect.equal (Ok (N.Float 60000022 "60_000.022e3"))
+                            |> Expect.equal (Ok (N.Float "60_000.022e3"))
                 , Test.test "Underscore after exponent 6.022e2_3" <|
                     \_ ->
                         singleNumber SV.Guida "6.022e2_3"
-                            |> Expect.equal (Ok (N.Float 6.022e23 "6.022e2_3"))
+                            |> Expect.equal (Ok (N.Float "6.022e2_3"))
                 , Test.test "Underscores before and after decimal point and exponent and '+' 6_000.0_22e+3_6" <|
                     \_ ->
                         singleNumber SV.Guida "6_000.0_22e+3_6"
-                            |> Expect.equal (Ok (N.Float 6.000022e39 "6_000.0_22e+3_6"))
+                            |> Expect.equal (Ok (N.Float "6_000.0_22e+3_6"))
                 , Test.test "Leading underscore: '_111000.602' should fail at position 1" <|
                     \_ ->
                         expectErrAtPosition 1 SV.Guida "_111000.602" E.NumberNoLeadingOrTrailingUnderscores
@@ -166,15 +169,15 @@ suite =
             , Test.test "Simple Float with no underscores 1000.42" <|
                 \_ ->
                     singleNumber SV.Elm "1000.42"
-                        |> Expect.equal (Ok (N.Float 1000.42 "1000.42"))
+                        |> Expect.equal (Ok (N.Float "1000.42"))
             , Test.test "Float with exponent and no underscores 6.022e23" <|
                 \_ ->
                     singleNumber SV.Elm "6.022e23"
-                        |> Expect.equal (Ok (N.Float 6.022e23 "6.022e23"))
+                        |> Expect.equal (Ok (N.Float "6.022e23"))
             , Test.test "Float with exponent and +/- and no underscores 6000.022e+36" <|
                 \_ ->
                     singleNumber SV.Elm "6000.022e+36"
-                        |> Expect.equal (Ok (N.Float 6.000022e39 "6000.022e+36"))
+                        |> Expect.equal (Ok (N.Float "6000.022e+36"))
             , Test.test "0xDEADBEEF" <|
                 \_ ->
                     singleNumber SV.Elm "0xDEADBEEF"
