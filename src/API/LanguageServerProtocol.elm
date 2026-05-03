@@ -19,7 +19,7 @@ import Compiler.Json.String as Json
 import Compiler.Parse.Module as Parse
 import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
-import Data.Map as Dict
+import Data.Map as Dict exposing (Dict)
 import List.Extra as List
 import Maybe.Extra as Maybe
 import System.TypeCheck.IO as TypeCheck
@@ -1050,6 +1050,7 @@ type Symbol
     | VarQual Src.VarType Name Name
     | Type Name
     | TypeQual Name Name
+    | FoundLocalVar A.Region
 
 
 findSymbolAtValues : Int -> Int -> List (A.Located Src.Value) -> Maybe Symbol
@@ -1068,18 +1069,67 @@ findSymbolAtValues line char values =
 
 
 findSymbolAtValue : Int -> Int -> A.Located Src.Value -> Maybe Symbol
-findSymbolAtValue line char (A.At region (Src.Value _ _ _ ( _, body ) maybeType)) =
+findSymbolAtValue line char (A.At region (Src.Value _ _ srcArgs ( _, body ) maybeType)) =
     if regionContainsPosition region line char then
+        let
+            localVars =
+                calculateLocalVars Dict.empty (List.map Src.c1Value srcArgs)
+        in
         case maybeType of
             Just ( _, ( _, type_ ) ) ->
                 Maybe.or (findSymbolAtType line char type_) <|
-                    findSymbolAtExpr line char body
+                    findSymbolAtExpr line char localVars body
 
             Nothing ->
-                findSymbolAtExpr line char body
+                findSymbolAtExpr line char localVars body
 
     else
         Nothing
+
+
+calculateLocalVars : Dict String Name A.Region -> List Src.Pattern -> Dict String Name A.Region
+calculateLocalVars acc patterns =
+    case patterns of
+        [] ->
+            acc
+
+        pattern :: rest ->
+            calculateLocalVars (calculateLocalVar acc pattern) rest
+
+
+calculateLocalVar : Dict String Name A.Region -> Src.Pattern -> Dict String Name A.Region
+calculateLocalVar acc (A.At region pattern) =
+    case pattern of
+        Src.PVar name ->
+            Dict.insert identity name region acc
+
+        Src.PRecord ( _, fields ) ->
+            List.foldl (\( _, A.At fieldRegion fieldName ) -> Dict.insert identity fieldName fieldRegion) acc fields
+
+        Src.PAlias ( _, aliasPattern ) ( _, A.At aliasRegion aliasName ) ->
+            calculateLocalVar acc aliasPattern
+                |> Dict.insert identity aliasName aliasRegion
+
+        Src.PTuple a b cs ->
+            calculateLocalVars acc (List.map Src.c2Value (a :: b :: cs))
+
+        Src.PCtor _ _ patterns ->
+            calculateLocalVars acc (List.map Src.c1Value patterns)
+
+        Src.PCtorQual _ _ _ patterns ->
+            calculateLocalVars acc (List.map Src.c1Value patterns)
+
+        Src.PList ( _, patterns ) ->
+            calculateLocalVars acc (List.map Src.c2Value patterns)
+
+        Src.PCons left right ->
+            calculateLocalVars acc [ Src.c0EolValue left, Src.c2EolValue right ]
+
+        Src.PParens ( _, innerPattern ) ->
+            calculateLocalVar acc innerPattern
+
+        _ ->
+            acc
 
 
 findSymbolAtType : Int -> Int -> Src.Type -> Maybe Symbol
@@ -1172,12 +1222,134 @@ findSymbolAtType line char (A.At region type_) =
         Nothing
 
 
-findSymbolAtExpr : Int -> Int -> Src.Expr -> Maybe Symbol
-findSymbolAtExpr line char (A.At region expr_) =
+findSymbolAtPattern : Int -> Int -> Src.Pattern -> Maybe Symbol
+findSymbolAtPattern line char (A.At region pattern_) =
+    if regionContainsPosition region line char then
+        case pattern_ of
+            Src.PAnything name ->
+                Just (Var Src.LowVar name)
+
+            Src.PVar name ->
+                Just (Var Src.LowVar name)
+
+            Src.PRecord ( _, fields ) ->
+                -- List.stoppableFoldl
+                --     (\( _, A.At nameRegion name ) acc ->
+                --         case acc of
+                --             Just _ ->
+                --                 List.Stop acc
+                --             Nothing ->
+                --                 List.Continue (findSymbolAtExpr line char (A.At nameRegion (Src.Var Src.LowVar name)))
+                --     )
+                --     Nothing
+                --     fields
+                Debug.todo "PRecord"
+
+            Src.PAlias innerPattern ( _, A.At aliasRegion aliasName ) ->
+                if regionContainsPosition aliasRegion line char then
+                    Just (Var Src.LowVar aliasName)
+
+                else
+                    findSymbolAtPattern line char (Src.c1Value innerPattern)
+
+            Src.PTuple a b cs ->
+                List.stoppableFoldl
+                    (\( _, pattern ) acc ->
+                        case acc of
+                            Just _ ->
+                                List.Stop acc
+
+                            Nothing ->
+                                List.Continue (findSymbolAtPattern line char pattern)
+                    )
+                    Nothing
+                    (a :: b :: cs)
+
+            Src.PCtor nameRegion name patterns ->
+                let
+                    localVars =
+                        calculateLocalVars Dict.empty (List.map Src.c1Value patterns)
+                in
+                Maybe.or (findSymbolAtExpr line char localVars (A.At nameRegion (Src.Var Src.CapVar name)))
+                    (List.stoppableFoldl
+                        (\( _, pattern ) acc ->
+                            case acc of
+                                Just _ ->
+                                    List.Stop acc
+
+                                Nothing ->
+                                    List.Continue (findSymbolAtPattern line char pattern)
+                        )
+                        Nothing
+                        patterns
+                    )
+
+            Src.PCtorQual nameRegion home name patterns ->
+                let
+                    localVars =
+                        calculateLocalVars Dict.empty (List.map Src.c1Value patterns)
+                in
+                Maybe.or (findSymbolAtExpr line char localVars (A.At nameRegion (Src.VarQual Src.CapVar home name)))
+                    (List.stoppableFoldl
+                        (\( _, pattern ) acc ->
+                            case acc of
+                                Just _ ->
+                                    List.Stop acc
+
+                                Nothing ->
+                                    List.Continue (findSymbolAtPattern line char pattern)
+                        )
+                        Nothing
+                        patterns
+                    )
+
+            Src.PList ( _, patterns ) ->
+                List.stoppableFoldl
+                    (\( _, pattern ) acc ->
+                        case acc of
+                            Just _ ->
+                                List.Stop acc
+
+                            Nothing ->
+                                List.Continue (findSymbolAtPattern line char pattern)
+                    )
+                    Nothing
+                    patterns
+
+            Src.PCons left right ->
+                List.stoppableFoldl
+                    (\pattern acc ->
+                        case acc of
+                            Just _ ->
+                                List.Stop acc
+
+                            Nothing ->
+                                List.Continue (findSymbolAtPattern line char pattern)
+                    )
+                    Nothing
+                    [ Src.c0EolValue left, Src.c2EolValue right ]
+
+            Src.PParens ( _, innerPattern ) ->
+                findSymbolAtPattern line char innerPattern
+
+            _ ->
+                Nothing
+
+    else
+        Nothing
+
+
+findSymbolAtExpr : Int -> Int -> Dict String Name A.Region -> Src.Expr -> Maybe Symbol
+findSymbolAtExpr line char localVars (A.At region expr_) =
     if regionContainsPosition region line char then
         case expr_ of
-            Src.Var varType name ->
-                Just (Var varType name)
+            Src.Var Src.LowVar name ->
+                Dict.get identity name localVars
+                    |> Maybe.map (FoundLocalVar >> Just)
+                    |> Maybe.withDefault (Just (Var Src.LowVar name))
+
+            Src.Var Src.CapVar name ->
+                Just (Var Src.CapVar name)
 
             Src.VarQual varType prefix name ->
                 Just (VarQual varType prefix name)
@@ -1190,13 +1362,13 @@ findSymbolAtExpr line char (A.At region expr_) =
                                 List.Stop acc
 
                             Nothing ->
-                                List.Continue (findSymbolAtExpr line char listExpr)
+                                List.Continue (findSymbolAtExpr line char localVars listExpr)
                     )
                     Nothing
                     list
 
             Src.Negate negatedExpr ->
-                findSymbolAtExpr line char negatedExpr
+                findSymbolAtExpr line char localVars negatedExpr
 
             Src.Binops ops final ->
                 List.stoppableFoldl
@@ -1206,13 +1378,13 @@ findSymbolAtExpr line char (A.At region expr_) =
                                 List.Stop acc
 
                             Nothing ->
-                                List.Continue (findSymbolAtExpr line char opExpr)
+                                List.Continue (findSymbolAtExpr line char localVars opExpr)
                     )
                     Nothing
                     (final :: List.map Tuple.first ops)
 
             Src.Lambda _ ( _, body ) ->
-                findSymbolAtExpr line char body
+                findSymbolAtExpr line char localVars body
 
             Src.Call func args ->
                 List.stoppableFoldl
@@ -1222,7 +1394,7 @@ findSymbolAtExpr line char (A.At region expr_) =
                                 List.Stop acc
 
                             Nothing ->
-                                List.Continue (findSymbolAtExpr line char callExpr)
+                                List.Continue (findSymbolAtExpr line char localVars callExpr)
                     )
                     Nothing
                     (func :: List.map Src.c1Value args)
@@ -1235,13 +1407,26 @@ findSymbolAtExpr line char (A.At region expr_) =
                                 List.Stop acc
 
                             Nothing ->
-                                List.Continue (findSymbolAtExpr line char ifExpr)
+                                List.Continue (findSymbolAtExpr line char localVars ifExpr)
                     )
                     Nothing
                     (finally :: List.concatMap (\( _, ( ( _, condition ), ( _, branch ) ) ) -> [ condition, branch ]) (firstBranch :: branches))
 
             Src.Let defs _ body ->
                 let
+                    updatedLocalVars =
+                        List.foldl
+                            (\( _, def ) acc ->
+                                case A.toValue def of
+                                    Src.Define (A.At nameRegion name) _ _ _ ->
+                                        Dict.insert identity name nameRegion acc
+
+                                    Src.Destruct pattern _ ->
+                                        calculateLocalVar acc pattern
+                            )
+                            localVars
+                            defs
+
                     defToExpr : ( a, A.Located Src.Def ) -> Src.Expr
                     defToExpr ( _, def ) =
                         case A.toValue def of
@@ -1258,26 +1443,44 @@ findSymbolAtExpr line char (A.At region expr_) =
                                 List.Stop acc
 
                             Nothing ->
-                                List.Continue (findSymbolAtExpr line char letExpr)
+                                List.Continue (findSymbolAtExpr line char updatedLocalVars letExpr)
                     )
                     Nothing
                     (body :: List.map defToExpr defs)
 
             Src.Case ( _, subject ) clauses ->
-                List.stoppableFoldl
-                    (\caseExpr acc ->
-                        case acc of
-                            Just _ ->
-                                List.Stop acc
+                Maybe.orList
+                    [ findSymbolAtExpr line char localVars subject
+                    , List.stoppableFoldl
+                        (\( ( _, pattern ), _ ) acc ->
+                            case acc of
+                                Just _ ->
+                                    List.Stop acc
 
-                            Nothing ->
-                                List.Continue (findSymbolAtExpr line char caseExpr)
-                    )
-                    Nothing
-                    (subject :: List.map (Tuple.second >> Src.c1Value) clauses)
+                                Nothing ->
+                                    List.Continue (findSymbolAtPattern line char pattern)
+                        )
+                        Nothing
+                        clauses
+                    , List.stoppableFoldl
+                        (\( ( _, pattern ), ( _, caseExpr ) ) acc ->
+                            case acc of
+                                Just _ ->
+                                    List.Stop acc
+
+                                Nothing ->
+                                    let
+                                        updatedLocalVars =
+                                            calculateLocalVar localVars pattern
+                                    in
+                                    List.Continue (findSymbolAtExpr line char updatedLocalVars caseExpr)
+                        )
+                        Nothing
+                        clauses
+                    ]
 
             Src.Access record _ ->
-                findSymbolAtExpr line char record
+                findSymbolAtExpr line char localVars record
 
             Src.Update ( _, name ) ( _, fields ) ->
                 List.stoppableFoldl
@@ -1287,7 +1490,7 @@ findSymbolAtExpr line char (A.At region expr_) =
                                 List.Stop acc
 
                             Nothing ->
-                                List.Continue (findSymbolAtExpr line char field)
+                                List.Continue (findSymbolAtExpr line char localVars field)
                     )
                     Nothing
                     (name :: List.map (Src.c2EolValue >> Tuple.second >> Src.c1Value) fields)
@@ -1300,7 +1503,7 @@ findSymbolAtExpr line char (A.At region expr_) =
                                 List.Stop acc
 
                             Nothing ->
-                                List.Continue (findSymbolAtExpr line char field)
+                                List.Continue (findSymbolAtExpr line char localVars field)
                     )
                     Nothing
                     fields
@@ -1313,13 +1516,13 @@ findSymbolAtExpr line char (A.At region expr_) =
                                 List.Stop acc
 
                             Nothing ->
-                                List.Continue (findSymbolAtExpr line char tupleExpr)
+                                List.Continue (findSymbolAtExpr line char localVars tupleExpr)
                     )
                     Nothing
                     (a :: b :: cs)
 
             Src.Parens ( _, firstExpr ) ->
-                findSymbolAtExpr line char firstExpr
+                findSymbolAtExpr line char localVars firstExpr
 
             _ ->
                 Nothing
@@ -2018,6 +2221,9 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                                                     Nothing
                                         )
                     )
+
+        FoundLocalVar region ->
+            Task.succeed (Just ( initialPath, region ))
 
 
 regionContainsPosition : A.Region -> Int -> Int -> Bool

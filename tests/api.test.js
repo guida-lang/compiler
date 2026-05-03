@@ -4,6 +4,7 @@ const process = require("node:process");
 const os = require("node:os");
 const tmp = require("tmp");
 const guida = require("..");
+const { lock, unlock } = require("os-lock");
 
 const config = (env = {}) => {
     return {
@@ -52,6 +53,24 @@ const config = (env = {}) => {
         },
         homedir: () => {
             return Promise.resolve(os.homedir());
+        },
+        lockFile: async (path) => {
+            return new Promise((resolve, _reject) => {
+                fs.open(path, 'a+', async (err, fd) => {
+                    if (err) { throw err; }
+                    await lock(fd, { exclusive: true });
+                    resolve();
+                });
+            });
+        },
+        unlockFile: async (path) => {
+            return new Promise((resolve, _reject) => {
+                fs.open(path, async (err, fd) => {
+                    if (err) { throw err; }
+                    await unlock(fd);
+                    resolve();
+                });
+            });
         }
     };
 };
@@ -145,7 +164,7 @@ main =
     describe("getDefinitionLocation", () => {
         let mainPath, utilPath;
         let assertLocation;
-        let expressionsCommentLine, unionTypeAnnotationsCommentLine, aliasTypeAnnotationsCommentLine, portsCommentLine;
+        let expressionsCommentLine, unionTypeAnnotationsCommentLine, aliasTypeAnnotationsCommentLine, portsCommentLine, casesCommentLine, localReferencesCommentLine;
         let fnRange, tTypeRange, t1Range, userTypeRange;
         let utilFnExpected, utilFn2Expected, utilTTypeExpected, utilUTypeExpected;
         let utilU1Expected, utilU2Expected, carTypeExpected, sendMessageFnExpected, messageReceiverFnExpected;
@@ -233,12 +252,40 @@ qualAliasTypeFn = Util.Car
 sendMessageFn = Util.sendMessage "Hello"
 
 messageReceiverSub = Util.messageReceiver (\\_ -> ())
+
+-- CASES
+
+type CaseType = Case1 | Case2
+
+caseTypeFn : CaseType -> CaseType
+caseTypeFn caseType =
+    case caseType of
+        Case1 -> Case1
+        Case2 -> Case2
+
+caseUtilTypeFn : Util.U -> Util.U
+caseUtilTypeFn uType =
+    case uType of
+        Util.U1 -> Util.U1
+        Util.U2 -> Util.U2
+
+-- LOCAL REFERENCES
+
+localReferencesFn arg =
+    let
+        localVar =
+            arg
+    in
+    case localVar of
+        x -> x
 `);
 
             expressionsCommentLine = 4;
             unionTypeAnnotationsCommentLine = 31;
             aliasTypeAnnotationsCommentLine = 55;
             portsCommentLine = 64;
+            casesCommentLine = 70;
+            localReferencesCommentLine = 86;
 
             fnRange = { range: { start: { line: expressionsCommentLine + 2, character: 0 }, end: { line: expressionsCommentLine + 2, character: 2 } } };
             tTypeRange = { range: { start: { line: unionTypeAnnotationsCommentLine + 2, character: 5 }, end: { line: unionTypeAnnotationsCommentLine + 2, character: 6 } } };
@@ -369,6 +416,18 @@ port messageReceiver : (String -> msg) -> Sub msg
         it("sendMessageFn", async () => { await assertLocation({ line: portsCommentLine + 2, character: 16 }, sendMessageFnExpected); });
 
         it("messageReceiverSub", async () => { await assertLocation({ line: portsCommentLine + 4, character: 21 }, messageReceiverFnExpected); });
+
+        // CASES
+        it("caseTypeFn", async () => { await assertLocation({ line: casesCommentLine + 7, character: 8 }, { path: mainPath, range: { start: { line: casesCommentLine + 2, character: 16 }, end: { line: casesCommentLine + 2, character: 21 } } }); });
+
+        it("caseUtilTypeFn", async () => { await assertLocation({ line: casesCommentLine + 13, character: 8 }, utilU1Expected); });
+
+        // LOCAL REFERENCES
+        it("localReferencesFn arg", async () => { await assertLocation({ line: localReferencesCommentLine + 5, character: 12 }, { path: mainPath, range: { start: { line: localReferencesCommentLine + 2, character: 18 }, end: { line: localReferencesCommentLine + 2, character: 21 } } }); });
+
+        it("localReferencesFn localVar", async () => { await assertLocation({ line: localReferencesCommentLine + 7, character: 9 }, { path: mainPath, range: { start: { line: localReferencesCommentLine + 4, character: 8 }, end: { line: localReferencesCommentLine + 4, character: 16 } } }); });
+
+        it("localReferencesFn case", async () => { await assertLocation({ line: localReferencesCommentLine + 8, character: 13 }, { path: mainPath, range: { start: { line: localReferencesCommentLine + 8, character: 8 }, end: { line: localReferencesCommentLine + 8, character: 9 } } }); });
     });
 
     describe("findReferences", () => {
