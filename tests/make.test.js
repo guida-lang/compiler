@@ -52,7 +52,7 @@ describe("guida make warning flags", () => {
         const result = runMake(tmpobj.name, ["--no-warnings"]);
 
         expect(result.status).toBe(0);
-        expect(result.stderr).not.toMatch(/UNUSED IMPORT|UNUSED VARIABLE|MISSING TYPE ANNOTATION/);
+        expect(result.stderr).not.toMatch(/unused import|unused variable|missing type annotation/);
         expect(fs.existsSync(path.join(tmpobj.name, "warning-flags.js"))).toBe(true);
     });
 
@@ -62,9 +62,9 @@ describe("guida make warning flags", () => {
         const result = runMake(tmpobj.name, ["--deny-warnings"]);
 
         expect(result.status).toBe(1);
-        expect(result.stderr).toMatch(/UNUSED IMPORT/);
-        expect(result.stderr).toMatch(/UNUSED VARIABLE/);
-        expect(result.stderr).toMatch(/MISSING TYPE ANNOTATION/);
+        expect(result.stderr).toMatch(/unused import/);
+        expect(result.stderr).toMatch(/unused variable/);
+        expect(result.stderr).toMatch(/missing type annotation/);
     });
 
     it("does not write output file with --deny-warnings", () => {
