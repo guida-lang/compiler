@@ -6,6 +6,7 @@ module Compiler.Reporting.Error exposing
     , reportToJson
     , toDoc
     , toJson
+    , warningReportToJson
     )
 
 import Builder.File as File
@@ -204,6 +205,15 @@ toJson { name, absolutePath, source, error } =
         [ ( "path", E.string absolutePath )
         , ( "name", E.string name )
         , ( "problems", E.list reportToJson (NE.toList reports) )
+        ]
+
+
+warningReportToJson : Report.WarningModuleReport -> E.Value
+warningReportToJson { path, name, warnings } =
+    E.object
+        [ ( "path", E.string path )
+        , ( "name", E.string name )
+        , ( "warnings", E.list reportToJson warnings )
         ]
 
 
