@@ -71,14 +71,13 @@ termHelp syntaxVersion start =
                                     Number.Int int src ->
                                         P.pure (A.at start end (Src.PInt int src))
 
-                                    Number.Float float _ ->
+                                    Number.Float float ->
                                         P.Parser <|
                                             \(P.State _ _ _ _ row col) ->
                                                 let
                                                     width : Int
                                                     width =
-                                                        String.fromFloat float
-                                                            |> String.length
+                                                        String.length float
                                                 in
                                                 P.Cerr row (col - width) (E.PFloat width)
                             )

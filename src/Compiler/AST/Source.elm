@@ -222,7 +222,7 @@ type Expr_
     = Chr String
     | Str String Bool
     | Int Int String
-    | Float Float String
+    | Float String
     | Var VarType Name
     | VarQual VarType Name Name
     | List (List (C2Eol Expr)) FComments
@@ -1250,11 +1250,10 @@ expr_Encoder expr_ =
                 , BE.string src
                 ]
 
-        Float float src ->
+        Float float ->
             BE.sequence
                 [ BE.unsignedInt8 3
-                , BE.float float
-                , BE.string src
+                , BE.string float
                 ]
 
         Var varType name ->
@@ -1406,9 +1405,7 @@ expr_Decoder =
                             BD.string
 
                     3 ->
-                        BD.map2 Float
-                            BD.float
-                            BD.string
+                        BD.map Float BD.string
 
                     4 ->
                         BD.map2 Var

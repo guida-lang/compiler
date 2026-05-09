@@ -70,7 +70,7 @@ canonicalize target root syntaxVersion env (A.At region expression) =
             Src.Int int _ ->
                 R.ok (Can.Int int)
 
-            Src.Float float _ ->
+            Src.Float float ->
                 R.ok (Can.Float float)
 
             Src.Var varType name ->

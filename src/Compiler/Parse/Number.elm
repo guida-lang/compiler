@@ -33,7 +33,7 @@ isDecimalDigit word =
 
 type Number
     = Int Int String
-    | Float Float String
+    | Float String
 
 
 number : SyntaxVersion -> (Row -> Col -> x) -> (E.Number -> Row -> Col -> x) -> P.Parser x Number
@@ -110,13 +110,13 @@ number syntaxVersion toExpectation toError =
                                         String.toFloat raw
                             in
                             case parsed of
-                                Just copy_ ->
+                                Just _ ->
                                     let
                                         newState : P.State
                                         newState =
                                             P.State src newPos end indent row newCol
                                     in
-                                    P.Cok (Float copy_ raw) newState
+                                    P.Cok (Float raw) newState
 
                                 Nothing ->
                                     P.Eerr row newCol toExpectation
