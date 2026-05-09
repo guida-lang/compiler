@@ -1158,7 +1158,7 @@ compile target root pkg mvar status =
                                         Just results ->
                                             Compile.compile target root pkg (Utils.mapMapMaybe identity compare getInterface results) modul
                                                 |> Task.fmap
-                                                    (\result ->
+                                                    (\( _, result ) ->
                                                         case result of
                                                             Err _ ->
                                                                 Nothing

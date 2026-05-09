@@ -5,12 +5,15 @@ module Compiler.Reporting.Result exposing
     , apply
     , bind
     , fmap
+    , getInfo
     , indexedTraverse
     , loop
     , mapTraverseWithKey
+    , modifyInfo
     , ok
     , pure
     , run
+    , runWithInfo
     , throw
     , traverse
     , traverseDict
@@ -44,6 +47,16 @@ run (RResult k) =
 
         RErr () w e ->
             ( List.reverse w, Err e )
+
+
+runWithInfo : i -> RResult i (List w) e a -> ( i, List w, Result (OneOrMore.OneOrMore e) a )
+runWithInfo initialInfo (RResult k) =
+    case k initialInfo [] of
+        ROk finalInfo w a ->
+            ( finalInfo, List.reverse w, Ok a )
+
+        RErr finalInfo w e ->
+            ( finalInfo, List.reverse w, Err e )
 
 
 
@@ -100,6 +113,20 @@ throw e =
     RResult <|
         \i w ->
             RErr i w (OneOrMore.one e)
+
+
+modifyInfo : (i -> i) -> RResult i w e ()
+modifyInfo f =
+    RResult <|
+        \i w ->
+            ROk (f i) w ()
+
+
+getInfo : RResult i w e i
+getInfo =
+    RResult <|
+        \i w ->
+            ROk i w i
 
 
 

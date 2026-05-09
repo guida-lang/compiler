@@ -1,4 +1,7 @@
-module Compiler.Reporting.Report exposing (Report(..))
+module Compiler.Reporting.Report exposing
+    ( Report(..)
+    , WarningModuleReport
+    )
 
 import Compiler.Reporting.Annotation as A
 import Compiler.Reporting.Doc as D
@@ -6,6 +9,13 @@ import Compiler.Reporting.Doc as D
 
 
 -- BUILD REPORTS
+
+
+type alias WarningModuleReport =
+    { path : String
+    , name : String
+    , warnings : List Report
+    }
 
 
 type Report

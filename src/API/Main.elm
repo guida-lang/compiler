@@ -53,8 +53,20 @@ app =
                             |> Task.bind
                                 (\result ->
                                     case result of
-                                        Ok output ->
-                                            exitWithResponse (Encode.object [ ( "output", Encode.string output ) ])
+                                        Ok ( output, warnings ) ->
+                                            let
+                                                warningsJson : Encode.Value
+                                                warningsJson =
+                                                    E.encodeUgly (E.list Error.warningReportToJson warnings)
+                                                        |> Decode.decodeString Decode.value
+                                                        |> Result.withDefault Encode.null
+                                            in
+                                            exitWithResponse
+                                                (Encode.object
+                                                    [ ( "output", Encode.string output )
+                                                    , ( "warnings", warningsJson )
+                                                    ]
+                                                )
 
                                         Err error ->
                                             exitWithResponse (Encode.object [ ( "error", Encode.string (E.encodeUgly (Exit.toJson (Exit.makeToReport error))) ) ])
