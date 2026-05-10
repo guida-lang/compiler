@@ -184,7 +184,7 @@ describe("guida install command", () => {
             "source-directories": [
                 "src"
             ],
-            "guida-version": "1.0.0",
+            "guida-version": "1.0.1",
             dependencies: {
                 direct: {
                     "guida-lang/stdlib": "1.0.1"
@@ -208,7 +208,7 @@ describe("guida install command", () => {
             "source-directories": [
                 "src"
             ],
-            "guida-version": "1.0.0",
+            "guida-version": "1.0.1",
             dependencies: {
                 direct: {
                     "guida-lang/stdlib": "1.0.1",
@@ -235,7 +235,7 @@ describe("guida install command", () => {
             license: "BSD-3-Clause",
             version: "1.0.0",
             "exposed-modules": [],
-            "guida-version": "1.0.0 <= v < 2.0.0",
+            "guida-version": "1.0.1 <= v < 2.0.0",
             dependencies: {
                 "guida-lang/stdlib": "1.0.1 <= v < 2.0.0"
             },
@@ -255,7 +255,7 @@ describe("guida install command", () => {
             license: "BSD-3-Clause",
             version: "1.0.0",
             "exposed-modules": [],
-            "guida-version": "1.0.0 <= v < 2.0.0",
+            "guida-version": "1.0.1 <= v < 2.0.0",
             dependencies: {
                 "guida-lang/stdlib": "1.0.1 <= v < 2.0.0",
                 "evancz/elm-playground": "1.0.3 <= v < 2.0.0"
@@ -274,7 +274,7 @@ describe("guida install command", () => {
             "source-directories": [
                 "src"
             ],
-            "guida-version": "1.0.0",
+            "guida-version": "1.0.1",
             dependencies: {
                 direct: {
                     "guida-lang/stdlib": "1.0.1"
@@ -298,7 +298,7 @@ describe("guida install command", () => {
             "source-directories": [
                 "src"
             ],
-            "guida-version": "1.0.0",
+            "guida-version": "1.0.1",
             dependencies: {
                 direct: {
                     "guida-lang/stdlib": "1.0.1",
@@ -325,7 +325,7 @@ describe("guida install command", () => {
             license: "BSD-3-Clause",
             version: "1.0.0",
             "exposed-modules": [],
-            "guida-version": "1.0.0 <= v < 2.0.0",
+            "guida-version": "1.0.1 <= v < 2.0.0",
             dependencies: {
                 "guida-lang/stdlib": "1.0.1 <= v < 2.0.0"
             },
@@ -345,7 +345,7 @@ describe("guida install command", () => {
             license: "BSD-3-Clause",
             version: "1.0.0",
             "exposed-modules": [],
-            "guida-version": "1.0.0 <= v < 2.0.0",
+            "guida-version": "1.0.1 <= v < 2.0.0",
             dependencies: {
                 "guida-lang/stdlib": "1.0.1 <= v < 2.0.0",
                 "guida-lang/project-metadata-utils": "1.0.0 <= v < 2.0.0"
@@ -428,7 +428,7 @@ describe("guida install command", () => {
             "source-directories": [
                 "src"
             ],
-            "guida-version": "1.0.0",
+            "guida-version": "1.0.1",
             dependencies: {
                 direct: {
                     "guida-lang/stdlib": "1.0.1"
@@ -452,7 +452,7 @@ describe("guida install command", () => {
             "source-directories": [
                 "src"
             ],
-            "guida-version": "1.0.0",
+            "guida-version": "1.0.1",
             dependencies: {
                 direct: {
                     "guida-lang/stdlib": "1.0.1",

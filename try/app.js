@@ -20,7 +20,7 @@ const defaultGuidaJson = `{
     "source-directories": [
         "src"
     ],
-    "guida-version": "1.0.0",
+    "guida-version": "1.0.1",
     "dependencies": {
         "direct": {
             "guida-lang/stdlib": "1.0.1"
