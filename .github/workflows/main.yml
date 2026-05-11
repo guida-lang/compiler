@@ -21,12 +21,10 @@ jobs:
           node-version-file: ".nvmrc"
           cache: "npm"
       - run: npm ci
-      - run: npm run build:bin
-      - run: npm run build:api
       - run: npm run test:eslint
       - run: npm run test:elm-format-validate
+      - name: self-hosted environment
+        run: ./bin/index.js make --optimize src/Terminal/Main.elm
       - run: npm run test:jest
       - run: npm run test:elm
       - run: npm run test:elm-review
-      - name: self-hosted environment
-        run: ./bin/index.js make --optimize src/Terminal/Main.elm
