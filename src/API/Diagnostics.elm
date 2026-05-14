@@ -9,6 +9,7 @@ import Builder.Reporting.Exit as Exit
 import Builder.Stuff as Stuff
 import Compiler.Data.NonEmptyList as NE
 import Compiler.Generate.Html as Html
+import Compiler.Reporting.Warning as W
 import Task exposing (Task)
 import Utils.Main exposing (FilePath)
 import Utils.Task.Extra as Task
@@ -18,7 +19,7 @@ import Utils.Task.Extra as Task
 -- RUN
 
 
-run : String -> Task Never (Result Exit.Make ())
+run : String -> Task Never (Result Exit.Make ( Stuff.Root, List W.Module ))
 run path =
     Stuff.findRoot
         |> Task.bind
@@ -32,7 +33,7 @@ run path =
             )
 
 
-runHelp : Stuff.Root -> String -> Task Never (Result Exit.Make ())
+runHelp : Stuff.Root -> String -> Task Never (Result Exit.Make ( Stuff.Root, List W.Module ))
 runHelp root path =
     BW.withScope
         (\scope ->
@@ -49,9 +50,9 @@ runHelp root path =
                             (\details ->
                                 buildPaths style root details (NE.Nonempty path [])
                                     |> Task.bind
-                                        (\artifacts ->
+                                        (\((Build.Artifacts warnModules _ _ _ _) as artifacts) ->
                                             toBuilder False Html.leadingLines root details artifacts
-                                                |> Task.map (\_ -> ())
+                                                |> Task.map (\_ -> ( root, warnModules ))
                                         )
                             )
         )

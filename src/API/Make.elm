@@ -76,7 +76,7 @@ runHelp root path (Flags debug optimize withSourceMaps) =
     BW.withScope
         (\scope ->
             Stuff.withRootLock (Stuff.rootPath root) <|
-                Task.run <|
+                Task.run
                     (getMode debug optimize
                         |> Task.bind
                             (\desiredMode ->

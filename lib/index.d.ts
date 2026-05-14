@@ -64,6 +64,12 @@ export type CompileError = {
     problems: Problem[];
 }
 
+export type Warning = {
+    path: string;
+    name: string;
+    warnings: Problem[];
+};
+
 export type DiagnosticsResult =
     | null
     | {
@@ -79,6 +85,10 @@ export type DiagnosticsResult =
         path: null | string;
         title: string;
         message: Message[];
+    }
+    | {
+        type: "warnings";
+        warnings: Warning[];
     };
 
 export type Position = {

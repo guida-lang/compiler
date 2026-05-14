@@ -8,8 +8,11 @@ import API.LanguageServerProtocol as LanguageServerProtocol
 import API.Make as Make
 import API.Uninstall as Uninstall
 import API.Upgrade as Upgrade
+import Builder.Deps.Solver as Solver
 import Builder.Reporting.Exit as Exit
-import Compiler.Generate.Target as Target
+import Builder.Stuff as Stuff
+import Compiler.Generate.Target as Target exposing (Target)
+import Compiler.Guida.Kernel exposing (Chunk(..))
 import Compiler.Guida.Package as Pkg
 import Compiler.Json.Encode as E
 import Compiler.Parse.Module as M
@@ -18,6 +21,8 @@ import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Error as Error
 import Compiler.Reporting.Error.Syntax as E
 import Compiler.Reporting.Render.Code as Code
+import Compiler.Reporting.Render.Type.Localizer as L
+import Compiler.Reporting.Warning as W
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO
@@ -133,8 +138,31 @@ app =
                             |> Task.bind
                                 (\result ->
                                     case result of
-                                        Ok _ ->
-                                            exitWithResponse Encode.null
+                                        Ok ( root, warnModules ) ->
+                                            let
+                                                target : Target
+                                                target =
+                                                    Stuff.rootToTarget root
+
+                                                warningToReport { absolutePath, name, source, warnings } =
+                                                    { path = absolutePath
+                                                    , name = name
+                                                    , warnings = List.map (W.toReport target L.empty (Code.toSource source)) warnings
+                                                    }
+                                            in
+                                            exitWithResponse
+                                                (Encode.object
+                                                    [ ( "type", Encode.string "warnings" )
+                                                    , ( "warnings"
+                                                      , warnModules
+                                                            |> List.map warningToReport
+                                                            |> E.list Error.warningReportToJson
+                                                            |> E.encodeUgly
+                                                            |> Decode.decodeString Decode.value
+                                                            |> Result.withDefault Encode.null
+                                                      )
+                                                    ]
+                                                )
 
                                         Err error ->
                                             exitWithResponse
@@ -145,35 +173,44 @@ app =
                                 )
 
                     GetDefinitionLocationArgs path line character ->
-                        LanguageServerProtocol.getDefinitionLocation path line character
+                        Solver.initEnv
                             |> Task.bind
-                                (\result ->
-                                    case result of
-                                        Ok location ->
-                                            exitWithResponse
-                                                (Encode.object
-                                                    [ ( "path", Encode.string location.path )
-                                                    , ( "range"
-                                                      , Encode.object
-                                                            [ ( "start"
-                                                              , Encode.object
-                                                                    [ ( "line", Encode.int location.range.start.line )
-                                                                    , ( "character", Encode.int location.range.start.character )
-                                                                    ]
-                                                              )
-                                                            , ( "end"
-                                                              , Encode.object
-                                                                    [ ( "line", Encode.int location.range.end.line )
-                                                                    , ( "character", Encode.int location.range.end.character )
-                                                                    ]
-                                                              )
-                                                            ]
-                                                      )
-                                                    ]
-                                                )
-
+                                (\eitherEnv ->
+                                    case eitherEnv of
                                         Err _ ->
                                             exitWithResponse Encode.null
+
+                                        Ok _ ->
+                                            LanguageServerProtocol.getDefinitionLocation path line character
+                                                |> Task.bind
+                                                    (\result ->
+                                                        case result of
+                                                            Ok location ->
+                                                                exitWithResponse
+                                                                    (Encode.object
+                                                                        [ ( "path", Encode.string location.path )
+                                                                        , ( "range"
+                                                                          , Encode.object
+                                                                                [ ( "start"
+                                                                                  , Encode.object
+                                                                                        [ ( "line", Encode.int location.range.start.line )
+                                                                                        , ( "character", Encode.int location.range.start.character )
+                                                                                        ]
+                                                                                  )
+                                                                                , ( "end"
+                                                                                  , Encode.object
+                                                                                        [ ( "line", Encode.int location.range.end.line )
+                                                                                        , ( "character", Encode.int location.range.end.character )
+                                                                                        ]
+                                                                                  )
+                                                                                ]
+                                                                          )
+                                                                        ]
+                                                                    )
+
+                                                            Err _ ->
+                                                                exitWithResponse Encode.null
+                                                    )
                                 )
 
                     FindReferencesArgs path line character ->

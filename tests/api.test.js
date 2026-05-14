@@ -185,6 +185,31 @@ main =
         expect(secondRunResult).toHaveProperty("output", expect.any(String));
     });
 
+    describe("diagnostics", () => {
+        it("reports warnings", async () => {
+            const tmpobj = tmp.dirSync();
+            process.chdir(tmpobj.name);
+
+            await guida.init(config(), { package: false });
+
+            fs.writeFileSync(path.join(tmpobj.name, "src", "Main.guida"), `module Main exposing (main)
+
+main : Program () () ()
+main =
+    Platform.worker
+        { init = \\_ -> ( (), Cmd.none )
+        , update = \\_ model -> ( model, Cmd.none )
+        , subscriptions = \\_ -> Sub.none
+        }
+
+noTypeAnnotationFn unusedVar = 1
+`);
+
+            const result = await guida.diagnostics(config(), { path: path.join(tmpobj.name, "src", "Main.guida") });
+            expect(result).toHaveProperty("warnings", expect.any(Array));
+        });
+    });
+
     describe("getDefinitionLocation", () => {
         let mainPath, utilPath;
         let assertLocation;
@@ -397,15 +422,15 @@ port messageReceiver : (String -> msg) -> Sub msg
         it("dependencyFunctionFn", async () => {
             await assertLocation({ line: expressionsCommentLine + 24, character: 23 },
                 {
-                    path: path.join(os.homedir(), ".guida", "1.0.0", "packages", "guida-lang", "stdlib", "1.0.1", "src", "List.elm"),
+                    path: path.join(os.homedir(), ".guida", "1.0.1", "packages", "guida-lang", "stdlib", "1.0.1", "src", "List.elm"),
                     range: { start: { line: 141, character: 0 }, end: { line: 141, character: 3 } }
                 });
         });
 
-        it.skip("dependencyUnionValueFn", async () => {
+        it("dependencyUnionValueFn", async () => {
             await assertLocation({ line: expressionsCommentLine + 25, character: 25 },
                 {
-                    path: path.join(os.homedir(), ".guida", "1.0.0", "packages", "guida-lang", "stdlib", "1.0.1", "src", "Basics.elm"),
+                    path: path.join(os.homedir(), ".guida", "1.0.1", "packages", "guida-lang", "stdlib", "1.0.1", "src", "Basics.elm"),
                     range: { start: { line: 525, character: 6 }, end: { line: 525, character: 10 } }
                 });
         });

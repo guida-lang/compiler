@@ -20,6 +20,7 @@ import Compiler.Parse.Module as Parse
 import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Annotation as A
 import Data.Map as Dict exposing (Dict)
+import Data.Set as Set exposing (EverySet)
 import List.Extra as List
 import Maybe.Extra as Maybe
 import System.TypeCheck.IO as TypeCheck
@@ -731,24 +732,22 @@ collectVarReferences targetName (A.At region expr_) =
 
 getDefinitionLocationHelp : Stuff.Root -> String -> Int -> Int -> Task Never (Result () Location)
 getDefinitionLocationHelp root path requestLine requestChar =
-    Stuff.withRootLock (Stuff.rootPath root)
-        (File.readUtf8 path
-            |> Task.bind
-                (\content ->
-                    let
-                        syntaxVersion : SV.SyntaxVersion
-                        syntaxVersion =
-                            SV.fileSyntaxVersion path
-                    in
-                    case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
-                        Ok (Src.Module _ _ _ _ imports values unions aliases _ _) ->
-                            findSymbolAt root path requestLine requestChar imports values unions aliases
-                                |> Task.fmap (Result.map regionToLocation)
+    File.readUtf8 path
+        |> Task.bind
+            (\content ->
+                let
+                    syntaxVersion : SV.SyntaxVersion
+                    syntaxVersion =
+                        SV.fileSyntaxVersion path
+                in
+                case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
+                    Ok (Src.Module _ _ _ _ imports values unions aliases _ _) ->
+                        findSymbolAt root path requestLine requestChar imports values unions aliases
+                            |> Task.fmap (Result.map regionToLocation)
 
-                        Err _ ->
-                            Task.pure (Err ())
-                )
-        )
+                    Err _ ->
+                        Task.pure (Err ())
+            )
 
 
 
@@ -1675,13 +1674,21 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                         |> Task.andThen
                             (\allModulePaths ->
                                 let
+                                    allModuleHomes =
+                                        Dict.foldl ModuleName.compareCanonical
+                                            (\(TypeCheck.Canonical pkgName home) path ->
+                                                Dict.insert identity home ( pkgName, path )
+                                            )
+                                            Dict.empty
+                                            allModulePaths
+
                                     findCtorInImport : Src.Import -> Task Never (Maybe ( Utils.FilePath, A.Region ))
                                     findCtorInImport (Src.Import ( _, A.At _ importName ) _ _) =
-                                        case Dict.get ModuleName.toComparableCanonical (TypeCheck.Canonical Pkg.dummyName importName) allModulePaths of
+                                        case Dict.get identity importName allModuleHomes of
                                             Nothing ->
                                                 Task.pure Nothing
 
-                                            Just path ->
+                                            Just ( pkgName, path ) ->
                                                 File.readUtf8 path
                                                     |> Task.map
                                                         (\content ->
@@ -1689,77 +1696,75 @@ findDefinitionForSymbol root initialPath symbol imports values unions aliases =
                                                                 syntaxVersion : SV.SyntaxVersion
                                                                 syntaxVersion =
                                                                     SV.fileSyntaxVersion path
+
+                                                                projectType : Parse.ProjectType
+                                                                projectType =
+                                                                    if pkgName == Pkg.dummyName then
+                                                                        Parse.Application
+
+                                                                    else
+                                                                        Parse.Package pkgName
                                                             in
-                                                            case Parse.fromByteString Target.GuidaTarget syntaxVersion Parse.Application content of
+                                                            case Parse.fromByteString Target.GuidaTarget syntaxVersion projectType content of
                                                                 Ok (Src.Module _ _ (A.At _ exports) _ _ _ targetUnions _ _ _) ->
                                                                     let
-                                                                        findCtor : Maybe ( Utils.FilePath, A.Region )
-                                                                        findCtor =
+                                                                        findCtor : Maybe (EverySet String Name) -> Maybe ( Utils.FilePath, A.Region )
+                                                                        findCtor maybeExposedList =
                                                                             List.stoppableFoldl
-                                                                                (\(A.At _ (Src.Union ( _, A.At _ _ ) _ ctors)) acc ->
+                                                                                (\(A.At _ ((Src.Union ( _, A.At _ unionName ) _ ctors) as union)) _ ->
                                                                                     case
                                                                                         List.stoppableFoldl
-                                                                                            (\( A.At ctorRegion ctorName, _ ) acc2 ->
+                                                                                            (\( A.At ctorRegion ctorName, _ ) _ ->
                                                                                                 if ctorName == name then
                                                                                                     List.Stop (Just ( path, ctorRegion ))
 
                                                                                                 else
-                                                                                                    List.Continue acc2
+                                                                                                    List.Continue Nothing
                                                                                             )
                                                                                             Nothing
                                                                                             (List.map Src.c2EolValue ctors)
                                                                                     of
                                                                                         Just foundCtor ->
-                                                                                            List.Stop (Just foundCtor)
+                                                                                            case maybeExposedList of
+                                                                                                Just exposedList ->
+                                                                                                    List.Stop
+                                                                                                        (if Set.member identity unionName exposedList then
+                                                                                                            Just foundCtor
+
+                                                                                                         else
+                                                                                                            Nothing
+                                                                                                        )
+
+                                                                                                Nothing ->
+                                                                                                    List.Stop (Just foundCtor)
 
                                                                                         Nothing ->
-                                                                                            List.Continue acc
+                                                                                            List.Continue Nothing
                                                                                 )
                                                                                 Nothing
                                                                                 targetUnions
                                                                     in
-                                                                    case exports of
-                                                                        Src.Open _ _ ->
-                                                                            findCtor
+                                                                    findCtor
+                                                                        (case exports of
+                                                                            Src.Open _ _ ->
+                                                                                Nothing
 
-                                                                        Src.Explicit (A.At _ exposedList) ->
-                                                                            let
-                                                                                isExposed : Bool
-                                                                                isExposed =
-                                                                                    List.any
+                                                                            Src.Explicit (A.At _ exposedList) ->
+                                                                                exposedList
+                                                                                    |> List.filterMap
                                                                                         (\( _, e ) ->
                                                                                             case e of
                                                                                                 Src.Upper (A.At _ exposedName) ( _, Src.Public _ ) ->
-                                                                                                    -- U(..) exposes all ctors for union U
-                                                                                                    List.any
-                                                                                                        (\(A.At _ (Src.Union ( _, A.At _ unionName ) ctors _)) ->
-                                                                                                            (unionName == exposedName)
-                                                                                                                && List.any
-                                                                                                                    (\c ->
-                                                                                                                        case Src.c1Value c of
-                                                                                                                            A.At _ ctorName ->
-                                                                                                                                ctorName == name
-                                                                                                                    )
-                                                                                                                    ctors
-                                                                                                        )
-                                                                                                        targetUnions
-
-                                                                                                Src.Upper (A.At _ exposedName) ( _, Src.Private ) ->
-                                                                                                    -- U2 is directly exposed
-                                                                                                    name == exposedName
+                                                                                                    Just exposedName
 
                                                                                                 _ ->
-                                                                                                    False
+                                                                                                    Nothing
                                                                                         )
-                                                                                        exposedList
-                                                                            in
-                                                                            if isExposed then
-                                                                                findCtor
+                                                                                    |> Set.fromList identity
+                                                                                    |> Just
+                                                                        )
 
-                                                                            else
-                                                                                Nothing
-
-                                                                Err _ ->
+                                                                Err err ->
                                                                     Nothing
                                                         )
 
