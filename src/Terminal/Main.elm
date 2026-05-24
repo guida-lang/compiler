@@ -20,14 +20,13 @@ import Terminal.Test as Test
 import Terminal.Uninstall as Uninstall
 import Terminal.Upgrade as Upgrade
 import Utils.Impure as Impure
-import Utils.Task.Extra as Task
 
 
 main : IO.Program
 main =
     IO.run
         (app
-            |> Task.bind
+            |> Task.andThen
                 (\() ->
                     Impure.task "exitWith"
                         []
@@ -182,8 +181,8 @@ interpreter =
     Terminal.Parser
         { singular = "interpreter"
         , plural = "interpreters"
-        , suggest = \_ -> Task.pure []
-        , examples = \_ -> Task.pure [ "node", "nodejs" ]
+        , suggest = \_ -> Task.succeed []
+        , examples = \_ -> Task.succeed [ "node", "nodejs" ]
         }
 
 
@@ -618,8 +617,8 @@ output =
     Terminal.Parser
         { singular = "output"
         , plural = "outputs"
-        , suggest = \_ -> Task.pure []
-        , examples = \_ -> Task.pure []
+        , suggest = \_ -> Task.succeed []
+        , examples = \_ -> Task.succeed []
         }
 
 
@@ -680,8 +679,8 @@ int =
     Terminal.Parser
         { singular = "int"
         , plural = "ints"
-        , suggest = \_ -> Task.pure []
-        , examples = \_ -> Task.pure []
+        , suggest = \_ -> Task.succeed []
+        , examples = \_ -> Task.succeed []
         }
 
 

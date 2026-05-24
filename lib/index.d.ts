@@ -2,12 +2,8 @@
  * Configuration object expected by the Guida runner.
  */
 export interface GuidaConfig {
-    // XMLHttpRequest constructor for making HTTP requests.
-    // @ts-ignore
-    XMLHttpRequest: typeof XMLHttpRequest;
-
     // Write text or binary data to a path.
-    writeFile(path: string, data: string | ArrayBuffer | Uint8Array | Buffer): Promise<void>;
+    writeFile(path: string, data: string | Uint8Array | Buffer): Promise<void>;
 
     // Read file contents. Can return text or binary data.
     readFile(path: string): Promise<string | ArrayBuffer | Uint8Array | Buffer | { buffer: ArrayBuffer }>;
@@ -26,6 +22,12 @@ export interface GuidaConfig {
 
     // Returns the string path of the current user's home directory.
     homedir(): Promise<string>;
+
+    // Lock a file to prevent concurrent modifications.
+    lockFile(path: string, request: any): Promise<void>;
+
+    // Unlock a previously locked file.
+    unlockFile(path: string, request: any): Promise<void>;
 
     // Environment map used by the runner.
     env?: Record<string, any>;
@@ -62,6 +64,12 @@ export type CompileError = {
     problems: Problem[];
 }
 
+export type Warning = {
+    path: string;
+    name: string;
+    warnings: Problem[];
+};
+
 export type DiagnosticsResult =
     | null
     | {
@@ -77,11 +85,20 @@ export type DiagnosticsResult =
         path: null | string;
         title: string;
         message: Message[];
+    }
+    | {
+        type: "warnings";
+        warnings: Warning[];
     };
 
 export type Position = {
     line: number;
     character: number;
+};
+
+export type Location = {
+    path: string;
+    range: { start: Position, end: Position };
 };
 
 export declare const init: (config: GuidaConfig, options?: InitOptions) => Promise<GuidaResponse>;
@@ -90,4 +107,6 @@ export declare const format: (config: GuidaConfig, content: string) => Promise<G
 export declare const install: (config: GuidaConfig, pkg: string) => Promise<GuidaResponse>;
 export declare const uninstall: (config: GuidaConfig, pkg: string) => Promise<GuidaResponse>;
 export declare const diagnostics: (config: GuidaConfig, args: { content: string } | { path: string }) => Promise<DiagnosticsResult>;
-export declare const getDefinitionLocation: (config: GuidaConfig, args: { uri: string, position: Position }) => Promise<null | { uri: string, start: Position, end: Position }>;
+export declare const getDefinitionLocation: (config: GuidaConfig, args: { path: string, position: Position }) => Promise<null | Location>;
+export declare const findReferences: (config: GuidaConfig, args: { path: string, position: Position }) => Promise<null | Location[]>;
+export declare const getHoverInformation: (config: GuidaConfig, args: { path: string, position: Position }) => Promise<null | { documentation: string; range?: { start: Position, end: Position } }>;

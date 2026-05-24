@@ -4,16 +4,26 @@ const process = require("node:process");
 const os = require("node:os");
 const tmp = require("tmp");
 const guida = require("..");
+const { lock, unlock } = require("os-lock");
 
-const config = () => {
+const config = (env = {}) => {
     return {
-        XMLHttpRequest: require("xmlhttprequest").XMLHttpRequest,
-        env: {},
+        env,
         writeFile: async (path, data) => {
-            fs.writeFileSync(path, data);
+            return new Promise((resolve, _reject) => {
+                fs.writeFile(path, data, (err) => {
+                    if (err) throw err;
+                    resolve();
+                });
+            });
         },
         readFile: async (path) => {
-            return await fs.readFileSync(path);
+            return new Promise((resolve, _reject) => {
+                fs.readFile(path, (err, data) => {
+                    if (err) throw err;
+                    resolve(data);
+                });
+            });
         },
         details: (path) => {
             const stats = fs.statSync(path);
@@ -43,6 +53,24 @@ const config = () => {
         },
         homedir: () => {
             return Promise.resolve(os.homedir());
+        },
+        lockFile: async (path) => {
+            return new Promise((resolve, _reject) => {
+                fs.open(path, 'a+', async (err, fd) => {
+                    if (err) { throw err; }
+                    await lock(fd, { exclusive: true });
+                    resolve();
+                });
+            });
+        },
+        unlockFile: async (path) => {
+            return new Promise((resolve, _reject) => {
+                fs.open(path, async (err, fd) => {
+                    if (err) { throw err; }
+                    await unlock(fd);
+                    resolve();
+                });
+            });
         }
     };
 };
@@ -114,7 +142,7 @@ noTypeAnnotationFn unusedVar = 1
         expect(result).toHaveProperty("warnings", expect.any(Array));
     });
 
-    it.skip("getDefinitionLocation - simple example", async () => {
+    it("make - compiles simple application", async () => {
         const tmpobj = tmp.dirSync();
         process.chdir(tmpobj.name);
 
@@ -122,29 +150,746 @@ noTypeAnnotationFn unusedVar = 1
 
         fs.writeFileSync(path.join(tmpobj.name, "src", "Main.guida"), `module Main exposing (main)
 
-main : Program () Int ()
+main : Program () () ()
 main =
     Platform.worker
-        { init = \\_ -> ( add 1 1, Cmd.none )
+        { init = \\_ -> ( (), Cmd.none )
+        , update = \\_ model -> ( model, Cmd.none )
+        , subscriptions = \\_ -> Sub.none
+        }`);
+
+        const result = await guida.make(config(), path.join(tmpobj.name, "src", "Main.guida"));
+        expect(result).toHaveProperty("output", expect.any(String));
+    });
+
+    it("make - sequential builds", async () => {
+        const tmpobj = tmp.dirSync();
+        process.chdir(tmpobj.name);
+
+        await guida.init(config(), { package: false });
+
+        fs.writeFileSync(path.join(tmpobj.name, "src", "Main.guida"), `module Main exposing (main)
+
+main : Program () () ()
+main =
+    Platform.worker
+        { init = \\_ -> ( (), Cmd.none )
+        , update = \\_ model -> ( model, Cmd.none )
+        , subscriptions = \\_ -> Sub.none
+        }`);
+
+        const firstRunResult = await guida.make(config(), path.join(tmpobj.name, "src", "Main.guida"));
+        expect(firstRunResult).toHaveProperty("output", expect.any(String));
+
+        const secondRunResult = await guida.make(config(), path.join(tmpobj.name, "src", "Main.guida"));
+        expect(secondRunResult).toHaveProperty("output", expect.any(String));
+    });
+
+    describe("diagnostics", () => {
+        it("reports warnings", async () => {
+            const tmpobj = tmp.dirSync();
+            process.chdir(tmpobj.name);
+
+            await guida.init(config(), { package: false });
+
+            fs.writeFileSync(path.join(tmpobj.name, "src", "Main.guida"), `module Main exposing (main)
+
+main : Program () () ()
+main =
+    Platform.worker
+        { init = \\_ -> ( (), Cmd.none )
         , update = \\_ model -> ( model, Cmd.none )
         , subscriptions = \\_ -> Sub.none
         }
 
-add : Int -> Int -> Int
-add a b =
-    a + b`);
+noTypeAnnotationFn unusedVar = 1
+`);
 
-        const location = await guida.getDefinitionLocation(
-            config(),
-            { uri: path.join(tmpobj.name, "src", "Main.guida"), position: { line: 5, character: 27 } }
-        )
+            const result = await guida.diagnostics(config(), { path: path.join(tmpobj.name, "src", "Main.guida") });
+            expect(result).toHaveProperty("warnings", expect.any(Array));
+        });
+    });
 
-        expect(location).toEqual({
-            uri: path.join(tmpobj.name, "src", "Main.guida"),
-            range: {
-                start: { line: 11, character: 0 },
-                end: { line: 11, character: 3 }
+    describe("getDefinitionLocation", () => {
+        let mainPath, utilPath;
+        let assertLocation;
+        let expressionsCommentLine, unionTypeAnnotationsCommentLine, aliasTypeAnnotationsCommentLine, portsCommentLine, casesCommentLine, localReferencesCommentLine;
+        let fnRange, tTypeRange, t1Range, userTypeRange;
+        let utilFnExpected, utilFn2Expected, utilTTypeExpected, utilUTypeExpected;
+        let utilU1Expected, utilU2Expected, carTypeExpected, sendMessageFnExpected, messageReceiverFnExpected;
+
+        beforeAll(async () => {
+            const tmpobj = tmp.dirSync();
+            process.chdir(tmpobj.name);
+
+            mainPath = path.join(tmpobj.name, "src", "Main.guida");
+            utilPath = path.join(tmpobj.name, "src", "Util.guida");
+
+            assertLocation = async (position, expected) => {
+                const location = await guida.getDefinitionLocation(config(), { path: mainPath, position: position });
+                expect(location).toEqual(Object.assign({ path: mainPath }, expected));
             }
+
+            await guida.init(config(), { package: false });
+
+            fs.writeFileSync(mainPath, `module Main exposing (..)
+
+import Util exposing (U(..), fn2)
+
+-- EXPRESSIONS
+
+fn = ()
+
+varFn = fn
+varQualFn = Util.fn
+listFn = [ fn ]
+negatedFn = -fn
+binopsFn = fn + fn
+lambdaFn = \\_ -> fn
+callFn = fn fn
+ifFn = if fn then fn else fn
+letFn = let _ = fn in fn
+caseFn = case fn of _ -> fn
+accessFn = fn.foo
+updateFn = { fn | foo = fn }
+recordFn = { foo = fn }
+tupleFn = (fn, fn, fn, fn)
+parensFn = (fn)
+
+exposedVarFn = fn2
+qualTypeFn = Util.U1
+exposedTypeFn = U2
+
+dependencyFunctionFn = List.map
+dependencyUnionValueFn = True
+
+-- UNION TYPE ANNOTATIONS
+
+type T = T1
+
+tLambda : T -> T
+tLambda = ()
+
+tType : T T
+tType = ()
+
+tTypeQual : Util.T T
+tTypeQual = ()
+
+tRecord : { t : T }
+tRecord = ()
+
+tTuple : (T, T, T, T)
+tTuple = ()
+
+exposedTType : U
+exposedTType = ()
+
+unionTypeRefFn = T1
+
+-- ALIAS TYPE ANNOTATIONS
+
+type alias User = { name: String }
+
+aliasLambda : User -> User
+aliasLambda = ()
+
+qualAliasTypeFn = Util.Car
+
+-- PORTS
+
+sendMessageFn = Util.sendMessage "Hello"
+
+messageReceiverSub = Util.messageReceiver (\\_ -> ())
+
+-- CASES
+
+type CaseType = Case1 | Case2
+
+caseTypeFn : CaseType -> CaseType
+caseTypeFn caseType =
+    case caseType of
+        Case1 -> Case1
+        Case2 -> Case2
+
+caseUtilTypeFn : Util.U -> Util.U
+caseUtilTypeFn uType =
+    case uType of
+        Util.U1 -> Util.U1
+        Util.U2 -> Util.U2
+
+-- LOCAL REFERENCES
+
+localReferencesFn arg =
+    let
+        localVar =
+            arg
+    in
+    case localVar of
+        x -> x
+`);
+
+            expressionsCommentLine = 4;
+            unionTypeAnnotationsCommentLine = 31;
+            aliasTypeAnnotationsCommentLine = 55;
+            portsCommentLine = 64;
+            casesCommentLine = 70;
+            localReferencesCommentLine = 86;
+
+            fnRange = { range: { start: { line: expressionsCommentLine + 2, character: 0 }, end: { line: expressionsCommentLine + 2, character: 2 } } };
+            tTypeRange = { range: { start: { line: unionTypeAnnotationsCommentLine + 2, character: 5 }, end: { line: unionTypeAnnotationsCommentLine + 2, character: 6 } } };
+            t1Range = { range: { start: { line: unionTypeAnnotationsCommentLine + 2, character: 9 }, end: { line: unionTypeAnnotationsCommentLine + 2, character: 11 } } };
+            userTypeRange = { range: { start: { line: aliasTypeAnnotationsCommentLine + 2, character: 11 }, end: { line: aliasTypeAnnotationsCommentLine + 2, character: 15 } } };
+
+            fs.writeFileSync(utilPath, `port module Util exposing (..)
+
+fn = ()
+
+fn2 = ()
+
+type T = T1 | T2
+
+type U = U1 | U2
+
+type alias Car = { sold: Bool }
+
+port sendMessage : String -> Cmd msg
+
+port messageReceiver : (String -> msg) -> Sub msg
+`);
+
+            utilFnExpected = { path: utilPath, range: { start: { line: 2, character: 0 }, end: { line: 2, character: 2 } } };
+            utilFn2Expected = { path: utilPath, range: { start: { line: 4, character: 0 }, end: { line: 4, character: 3 } } };
+            utilTTypeExpected = { path: utilPath, range: { start: { line: 6, character: 5 }, end: { line: 6, character: 6 } } };
+            utilUTypeExpected = { path: utilPath, range: { start: { line: 8, character: 5 }, end: { line: 8, character: 6 } } };
+            utilU1Expected = { path: utilPath, range: { start: { line: 8, character: 9 }, end: { line: 8, character: 11 } } };
+            utilU2Expected = { path: utilPath, range: { start: { line: 8, character: 14 }, end: { line: 8, character: 16 } } };
+            carTypeExpected = { path: utilPath, range: { start: { line: 10, character: 11 }, end: { line: 10, character: 14 } } };
+            sendMessageFnExpected = { path: utilPath, range: { start: { line: 12, character: 5 }, end: { line: 12, character: 16 } } };
+            messageReceiverFnExpected = { path: utilPath, range: { start: { line: 14, character: 5 }, end: { line: 14, character: 20 } } };
+        });
+
+        // IMPORTS
+        it("importUtil", async () => { await assertLocation({ line: 2, character: 7 }, { path: utilPath, range: { start: { line: 0, character: 12 }, end: { line: 0, character: 16 } } }); });
+        it("importUtilFn2", async () => { await assertLocation({ line: 2, character: 29 }, utilFn2Expected); });
+
+        // EXPRESSIONS
+        it("varFn", async () => { await assertLocation({ line: expressionsCommentLine + 4, character: 8 }, fnRange); });
+        it("varFn (end position)", async () => { await assertLocation({ line: expressionsCommentLine + 4, character: 10 }, fnRange); });
+
+        it("varQualFn", async () => { await assertLocation({ line: expressionsCommentLine + 5, character: 12 }, utilFnExpected); });
+
+        it("listFn", async () => { await assertLocation({ line: expressionsCommentLine + 6, character: 11 }, fnRange); });
+
+        it("negatedFn", async () => { await assertLocation({ line: expressionsCommentLine + 7, character: 13 }, fnRange); });
+
+        it("binopsFn op", async () => { await assertLocation({ line: expressionsCommentLine + 8, character: 11 }, fnRange); });
+        it("binopsFn final", async () => { await assertLocation({ line: expressionsCommentLine + 8, character: 16 }, fnRange); });
+
+        it("lambdaFn", async () => { await assertLocation({ line: expressionsCommentLine + 9, character: 17 }, fnRange); });
+
+        it("callFn func", async () => { await assertLocation({ line: expressionsCommentLine + 10, character: 9 }, fnRange); });
+        it("callFn arg", async () => { await assertLocation({ line: expressionsCommentLine + 10, character: 12 }, fnRange); });
+
+        it("ifFn condition", async () => { await assertLocation({ line: expressionsCommentLine + 11, character: 10 }, fnRange); });
+        it("ifFn branch", async () => { await assertLocation({ line: expressionsCommentLine + 11, character: 18 }, fnRange); });
+        it("ifFn finally", async () => { await assertLocation({ line: expressionsCommentLine + 11, character: 26 }, fnRange); });
+
+        it("letFn def", async () => { await assertLocation({ line: expressionsCommentLine + 12, character: 16 }, fnRange); });
+        it("letFn body", async () => { await assertLocation({ line: expressionsCommentLine + 12, character: 22 }, fnRange); });
+
+        it("caseFn subject", async () => { await assertLocation({ line: expressionsCommentLine + 13, character: 14 }, fnRange); });
+        it("caseFn body", async () => { await assertLocation({ line: expressionsCommentLine + 13, character: 25 }, fnRange); });
+
+        it("accessFn record", async () => { await assertLocation({ line: expressionsCommentLine + 14, character: 11 }, fnRange); });
+
+        it("updateFn name", async () => { await assertLocation({ line: expressionsCommentLine + 15, character: 13 }, fnRange); });
+        it("updateFn field", async () => { await assertLocation({ line: expressionsCommentLine + 15, character: 24 }, fnRange); });
+
+        it("recordFn", async () => { await assertLocation({ line: expressionsCommentLine + 16, character: 19 }, fnRange); });
+
+        it("tupleFn 1st", async () => { await assertLocation({ line: expressionsCommentLine + 17, character: 11 }, fnRange); });
+        it("tupleFn 2nd", async () => { await assertLocation({ line: expressionsCommentLine + 17, character: 15 }, fnRange); });
+        it("tupleFn 3rd", async () => { await assertLocation({ line: expressionsCommentLine + 17, character: 19 }, fnRange); });
+        it("tupleFn 4th", async () => { await assertLocation({ line: expressionsCommentLine + 17, character: 23 }, fnRange); });
+
+        it("parensFn", async () => { await assertLocation({ line: expressionsCommentLine + 18, character: 12 }, fnRange); });
+
+        it("exposedVarFn", async () => { await assertLocation({ line: expressionsCommentLine + 20, character: 15 }, utilFn2Expected); });
+        it("qualTypeFn", async () => { await assertLocation({ line: expressionsCommentLine + 21, character: 13 }, utilU1Expected); });
+        it("exposedTypeFn", async () => { await assertLocation({ line: expressionsCommentLine + 22, character: 16 }, utilU2Expected); });
+
+        it("dependencyFunctionFn", async () => {
+            await assertLocation({ line: expressionsCommentLine + 24, character: 23 },
+                {
+                    path: path.join(os.homedir(), ".guida", "1.0.1", "packages", "guida-lang", "stdlib", "1.0.1", "src", "List.elm"),
+                    range: { start: { line: 141, character: 0 }, end: { line: 141, character: 3 } }
+                });
+        });
+
+        it("dependencyUnionValueFn", async () => {
+            await assertLocation({ line: expressionsCommentLine + 25, character: 25 },
+                {
+                    path: path.join(os.homedir(), ".guida", "1.0.1", "packages", "guida-lang", "stdlib", "1.0.1", "src", "Basics.elm"),
+                    range: { start: { line: 525, character: 6 }, end: { line: 525, character: 10 } }
+                });
+        });
+
+        // UNION TYPE ANNOTATIONS
+        it("lambdaType arg", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 4, character: 10 }, tTypeRange); });
+        it("lambdaType result", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 4, character: 15 }, tTypeRange); });
+
+        it("tType name", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 7, character: 8 }, tTypeRange); });
+        it("tType arg", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 7, character: 10 }, tTypeRange); });
+
+        it("tTypeQual name", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 10, character: 12 }, utilTTypeExpected); });
+        it("tTypeQual arg", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 10, character: 19 }, tTypeRange); });
+
+        it("tRecord", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 13, character: 16 }, tTypeRange); });
+
+        it("tTuple 1st", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 16, character: 10 }, tTypeRange); });
+        it("tTuple 2nd", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 16, character: 13 }, tTypeRange); });
+        it("tTuple 3rd", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 16, character: 16 }, tTypeRange); });
+        it("tTuple 4th", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 16, character: 19 }, tTypeRange); });
+
+        it("exposedTType", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 19, character: 15 }, utilUTypeExpected); });
+
+        it("unionTypeRefFn", async () => { await assertLocation({ line: unionTypeAnnotationsCommentLine + 22, character: 17 }, t1Range); });
+
+        // ALIAS TYPE ANNOTATIONS
+        it("aliasLambda", async () => { await assertLocation({ line: aliasTypeAnnotationsCommentLine + 4, character: 15 }, userTypeRange); });
+
+        it("qualAliasTypeFn", async () => { await assertLocation({ line: aliasTypeAnnotationsCommentLine + 7, character: 18 }, carTypeExpected); });
+
+        // PORTS
+        it("sendMessageFn", async () => { await assertLocation({ line: portsCommentLine + 2, character: 16 }, sendMessageFnExpected); });
+
+        it("messageReceiverSub", async () => { await assertLocation({ line: portsCommentLine + 4, character: 21 }, messageReceiverFnExpected); });
+
+        // CASES
+        it("caseTypeFn", async () => { await assertLocation({ line: casesCommentLine + 7, character: 8 }, { path: mainPath, range: { start: { line: casesCommentLine + 2, character: 16 }, end: { line: casesCommentLine + 2, character: 21 } } }); });
+
+        it("caseUtilTypeFn", async () => { await assertLocation({ line: casesCommentLine + 13, character: 8 }, utilU1Expected); });
+
+        // LOCAL REFERENCES
+        it("localReferencesFn arg", async () => { await assertLocation({ line: localReferencesCommentLine + 5, character: 12 }, { path: mainPath, range: { start: { line: localReferencesCommentLine + 2, character: 18 }, end: { line: localReferencesCommentLine + 2, character: 21 } } }); });
+
+        it("localReferencesFn localVar", async () => { await assertLocation({ line: localReferencesCommentLine + 7, character: 9 }, { path: mainPath, range: { start: { line: localReferencesCommentLine + 4, character: 8 }, end: { line: localReferencesCommentLine + 4, character: 16 } } }); });
+
+        it("localReferencesFn case", async () => { await assertLocation({ line: localReferencesCommentLine + 8, character: 13 }, { path: mainPath, range: { start: { line: localReferencesCommentLine + 8, character: 8 }, end: { line: localReferencesCommentLine + 8, character: 9 } } }); });
+    });
+
+    describe("findReferences", () => {
+        let mainPath;
+        let assertReferences;
+
+        beforeAll(async () => {
+            const tmpobj = tmp.dirSync();
+            process.chdir(tmpobj.name);
+
+            mainPath = path.join(tmpobj.name, "src", "Main.guida");
+
+            assertReferences = async (position, expected) => {
+                const refs = await guida.findReferences(config(), { path: mainPath, position: position });
+                expect(refs).toEqual(expected);
+            }
+
+            await guida.init(config(), { package: false });
+
+            fs.writeFileSync(mainPath, `module Main exposing (..)
+
+fn a = a + a
+single a = a
+none a = 1
+list a = [ a ]
+neg a = -a
+call a = id a
+iff a = if a then a else a
+lett a = let x = a in a
+casee a = case a of _ -> a
+acc a = a.x
+upd a = { a | x = a }
+rec a = { x = a }
+tup a = ( a, a, a )
+par a = (a)
+ptup (a, b) = a
+palias (x as a) = a
+ppar (a) = a
+`);
+        });
+
+        it("fn (argument)", async () => {
+            await assertReferences({ line: 2, character: 3 }, [
+                { path: mainPath, range: { start: { line: 2, character: 3 }, end: { line: 2, character: 4 } } },
+                { path: mainPath, range: { start: { line: 2, character: 7 }, end: { line: 2, character: 8 } } },
+                { path: mainPath, range: { start: { line: 2, character: 11 }, end: { line: 2, character: 12 } } }
+            ]);
+        });
+
+        it("fn (first usage)", async () => {
+            await assertReferences({ line: 2, character: 7 }, [
+                { path: mainPath, range: { start: { line: 2, character: 3 }, end: { line: 2, character: 4 } } },
+                { path: mainPath, range: { start: { line: 2, character: 7 }, end: { line: 2, character: 8 } } },
+                { path: mainPath, range: { start: { line: 2, character: 11 }, end: { line: 2, character: 12 } } }
+            ]);
+        });
+
+        it("fn (second usage)", async () => {
+            await assertReferences({ line: 2, character: 11 }, [
+                { path: mainPath, range: { start: { line: 2, character: 3 }, end: { line: 2, character: 4 } } },
+                { path: mainPath, range: { start: { line: 2, character: 7 }, end: { line: 2, character: 8 } } },
+                { path: mainPath, range: { start: { line: 2, character: 11 }, end: { line: 2, character: 12 } } }
+            ]);
+        });
+
+        it("singleFn (argument)", async () => {
+            await assertReferences({ line: 3, character: 7 }, [
+                { path: mainPath, range: { start: { line: 3, character: 7 }, end: { line: 3, character: 8 } } },
+                { path: mainPath, range: { start: { line: 3, character: 11 }, end: { line: 3, character: 12 } } }
+            ]);
+        });
+
+        it("singleFn (usage)", async () => {
+            await assertReferences({ line: 3, character: 11 }, [
+                { path: mainPath, range: { start: { line: 3, character: 7 }, end: { line: 3, character: 8 } } },
+                { path: mainPath, range: { start: { line: 3, character: 11 }, end: { line: 3, character: 12 } } }
+            ]);
+        });
+
+        it("no usage (argument)", async () => {
+            await assertReferences({ line: 4, character: 5 }, [
+                { path: mainPath, range: { start: { line: 4, character: 5 }, end: { line: 4, character: 6 } } }
+            ]);
+        });
+
+        it("list (argument)", async () => {
+            await assertReferences({ line: 5, character: 5 }, [
+                { path: mainPath, range: { start: { line: 5, character: 5 }, end: { line: 5, character: 6 } } },
+                { path: mainPath, range: { start: { line: 5, character: 11 }, end: { line: 5, character: 12 } } }
+            ]);
+        });
+
+        it("list (usage)", async () => {
+            await assertReferences({ line: 5, character: 11 }, [
+                { path: mainPath, range: { start: { line: 5, character: 5 }, end: { line: 5, character: 6 } } },
+                { path: mainPath, range: { start: { line: 5, character: 11 }, end: { line: 5, character: 12 } } }
+            ]);
+        });
+
+        it("negate (argument)", async () => {
+            await assertReferences({ line: 6, character: 4 }, [
+                { path: mainPath, range: { start: { line: 6, character: 4 }, end: { line: 6, character: 5 } } },
+                { path: mainPath, range: { start: { line: 6, character: 9 }, end: { line: 6, character: 10 } } }
+            ]);
+        });
+
+        it("negate (usage)", async () => {
+            await assertReferences({ line: 6, character: 9 }, [
+                { path: mainPath, range: { start: { line: 6, character: 4 }, end: { line: 6, character: 5 } } },
+                { path: mainPath, range: { start: { line: 6, character: 9 }, end: { line: 6, character: 10 } } }
+            ]);
+        });
+
+        it("call (argument)", async () => {
+            await assertReferences({ line: 7, character: 5 }, [
+                { path: mainPath, range: { start: { line: 7, character: 5 }, end: { line: 7, character: 6 } } },
+                { path: mainPath, range: { start: { line: 7, character: 12 }, end: { line: 7, character: 13 } } }
+            ]);
+        });
+
+        it("call (usage)", async () => {
+            await assertReferences({ line: 7, character: 12 }, [
+                { path: mainPath, range: { start: { line: 7, character: 5 }, end: { line: 7, character: 6 } } },
+                { path: mainPath, range: { start: { line: 7, character: 12 }, end: { line: 7, character: 13 } } }
+            ]);
+        });
+
+        it("if (argument)", async () => {
+            await assertReferences({ line: 8, character: 4 }, [
+                { path: mainPath, range: { start: { line: 8, character: 4 }, end: { line: 8, character: 5 } } },
+                { path: mainPath, range: { start: { line: 8, character: 11 }, end: { line: 8, character: 12 } } },
+                { path: mainPath, range: { start: { line: 8, character: 18 }, end: { line: 8, character: 19 } } },
+                { path: mainPath, range: { start: { line: 8, character: 25 }, end: { line: 8, character: 26 } } }
+            ]);
+        });
+
+        it("if (condition)", async () => {
+            await assertReferences({ line: 8, character: 11 }, [
+                { path: mainPath, range: { start: { line: 8, character: 4 }, end: { line: 8, character: 5 } } },
+                { path: mainPath, range: { start: { line: 8, character: 11 }, end: { line: 8, character: 12 } } },
+                { path: mainPath, range: { start: { line: 8, character: 18 }, end: { line: 8, character: 19 } } },
+                { path: mainPath, range: { start: { line: 8, character: 25 }, end: { line: 8, character: 26 } } }
+            ]);
+        });
+
+        it("if (then)", async () => {
+            await assertReferences({ line: 8, character: 18 }, [
+                { path: mainPath, range: { start: { line: 8, character: 4 }, end: { line: 8, character: 5 } } },
+                { path: mainPath, range: { start: { line: 8, character: 11 }, end: { line: 8, character: 12 } } },
+                { path: mainPath, range: { start: { line: 8, character: 18 }, end: { line: 8, character: 19 } } },
+                { path: mainPath, range: { start: { line: 8, character: 25 }, end: { line: 8, character: 26 } } }
+            ]);
+        });
+
+        it("if (else)", async () => {
+            await assertReferences({ line: 8, character: 25 }, [
+                { path: mainPath, range: { start: { line: 8, character: 4 }, end: { line: 8, character: 5 } } },
+                { path: mainPath, range: { start: { line: 8, character: 11 }, end: { line: 8, character: 12 } } },
+                { path: mainPath, range: { start: { line: 8, character: 18 }, end: { line: 8, character: 19 } } },
+                { path: mainPath, range: { start: { line: 8, character: 25 }, end: { line: 8, character: 26 } } }
+            ]);
+        });
+
+        it("let (argument)", async () => {
+            await assertReferences({ line: 9, character: 5 }, [
+                { path: mainPath, range: { start: { line: 9, character: 5 }, end: { line: 9, character: 6 } } },
+                { path: mainPath, range: { start: { line: 9, character: 17 }, end: { line: 9, character: 18 } } },
+                { path: mainPath, range: { start: { line: 9, character: 22 }, end: { line: 9, character: 23 } } }
+            ]);
+        });
+
+        it("let (assignment)", async () => {
+            await assertReferences({ line: 9, character: 17 }, [
+                { path: mainPath, range: { start: { line: 9, character: 5 }, end: { line: 9, character: 6 } } },
+                { path: mainPath, range: { start: { line: 9, character: 17 }, end: { line: 9, character: 18 } } },
+                { path: mainPath, range: { start: { line: 9, character: 22 }, end: { line: 9, character: 23 } } }
+            ]);
+        });
+
+        it("let (body)", async () => {
+            await assertReferences({ line: 9, character: 22 }, [
+                { path: mainPath, range: { start: { line: 9, character: 5 }, end: { line: 9, character: 6 } } },
+                { path: mainPath, range: { start: { line: 9, character: 17 }, end: { line: 9, character: 18 } } },
+                { path: mainPath, range: { start: { line: 9, character: 22 }, end: { line: 9, character: 23 } } }
+            ]);
+        });
+
+        it("case (argument)", async () => {
+            await assertReferences({ line: 10, character: 6 }, [
+                { path: mainPath, range: { start: { line: 10, character: 6 }, end: { line: 10, character: 7 } } },
+                { path: mainPath, range: { start: { line: 10, character: 15 }, end: { line: 10, character: 16 } } },
+                { path: mainPath, range: { start: { line: 10, character: 25 }, end: { line: 10, character: 26 } } }
+            ]);
+        });
+
+        it("case (expression)", async () => {
+            await assertReferences({ line: 10, character: 15 }, [
+                { path: mainPath, range: { start: { line: 10, character: 6 }, end: { line: 10, character: 7 } } },
+                { path: mainPath, range: { start: { line: 10, character: 15 }, end: { line: 10, character: 16 } } },
+                { path: mainPath, range: { start: { line: 10, character: 25 }, end: { line: 10, character: 26 } } }
+            ]);
+        });
+
+        it("case (body)", async () => {
+            await assertReferences({ line: 10, character: 25 }, [
+                { path: mainPath, range: { start: { line: 10, character: 6 }, end: { line: 10, character: 7 } } },
+                { path: mainPath, range: { start: { line: 10, character: 15 }, end: { line: 10, character: 16 } } },
+                { path: mainPath, range: { start: { line: 10, character: 25 }, end: { line: 10, character: 26 } } }
+            ]);
+        });
+
+        it("access (argument)", async () => {
+            await assertReferences({ line: 11, character: 4 }, [
+                { path: mainPath, range: { start: { line: 11, character: 4 }, end: { line: 11, character: 5 } } },
+                { path: mainPath, range: { start: { line: 11, character: 8 }, end: { line: 11, character: 9 } } }
+            ]);
+        });
+
+        it("access (usage)", async () => {
+            await assertReferences({ line: 11, character: 8 }, [
+                { path: mainPath, range: { start: { line: 11, character: 4 }, end: { line: 11, character: 5 } } },
+                { path: mainPath, range: { start: { line: 11, character: 8 }, end: { line: 11, character: 9 } } }
+            ]);
+        });
+
+        it("update (argument)", async () => {
+            await assertReferences({ line: 12, character: 4 }, [
+                { path: mainPath, range: { start: { line: 12, character: 4 }, end: { line: 12, character: 5 } } },
+                { path: mainPath, range: { start: { line: 12, character: 10 }, end: { line: 12, character: 11 } } },
+                { path: mainPath, range: { start: { line: 12, character: 18 }, end: { line: 12, character: 19 } } }
+            ]);
+        });
+
+        it("update (name)", async () => {
+            await assertReferences({ line: 12, character: 10 }, [
+                { path: mainPath, range: { start: { line: 12, character: 4 }, end: { line: 12, character: 5 } } },
+                { path: mainPath, range: { start: { line: 12, character: 10 }, end: { line: 12, character: 11 } } },
+                { path: mainPath, range: { start: { line: 12, character: 18 }, end: { line: 12, character: 19 } } }
+            ]);
+        });
+
+        it("update (expression)", async () => {
+            await assertReferences({ line: 12, character: 18 }, [
+                { path: mainPath, range: { start: { line: 12, character: 4 }, end: { line: 12, character: 5 } } },
+                { path: mainPath, range: { start: { line: 12, character: 10 }, end: { line: 12, character: 11 } } },
+                { path: mainPath, range: { start: { line: 12, character: 18 }, end: { line: 12, character: 19 } } }
+            ]);
+        });
+
+        it("record (argument)", async () => {
+            await assertReferences({ line: 13, character: 4 }, [
+                { path: mainPath, range: { start: { line: 13, character: 4 }, end: { line: 13, character: 5 } } },
+                { path: mainPath, range: { start: { line: 13, character: 14 }, end: { line: 13, character: 15 } } }
+            ]);
+        });
+
+        it("record (expression)", async () => {
+            await assertReferences({ line: 13, character: 14 }, [
+                { path: mainPath, range: { start: { line: 13, character: 4 }, end: { line: 13, character: 5 } } },
+                { path: mainPath, range: { start: { line: 13, character: 14 }, end: { line: 13, character: 15 } } }
+            ]);
+        });
+
+        it("tuple (argument)", async () => {
+            await assertReferences({ line: 14, character: 4 }, [
+                { path: mainPath, range: { start: { line: 14, character: 4 }, end: { line: 14, character: 5 } } },
+                { path: mainPath, range: { start: { line: 14, character: 10 }, end: { line: 14, character: 11 } } },
+                { path: mainPath, range: { start: { line: 14, character: 13 }, end: { line: 14, character: 14 } } },
+                { path: mainPath, range: { start: { line: 14, character: 16 }, end: { line: 14, character: 17 } } }
+            ]);
+        });
+
+        it("tuple (first usage)", async () => {
+            await assertReferences({ line: 14, character: 10 }, [
+                { path: mainPath, range: { start: { line: 14, character: 4 }, end: { line: 14, character: 5 } } },
+                { path: mainPath, range: { start: { line: 14, character: 10 }, end: { line: 14, character: 11 } } },
+                { path: mainPath, range: { start: { line: 14, character: 13 }, end: { line: 14, character: 14 } } },
+                { path: mainPath, range: { start: { line: 14, character: 16 }, end: { line: 14, character: 17 } } }
+            ]);
+        });
+
+        it("tuple (second usage)", async () => {
+            await assertReferences({ line: 14, character: 13 }, [
+                { path: mainPath, range: { start: { line: 14, character: 4 }, end: { line: 14, character: 5 } } },
+                { path: mainPath, range: { start: { line: 14, character: 10 }, end: { line: 14, character: 11 } } },
+                { path: mainPath, range: { start: { line: 14, character: 13 }, end: { line: 14, character: 14 } } },
+                { path: mainPath, range: { start: { line: 14, character: 16 }, end: { line: 14, character: 17 } } }
+            ]);
+        });
+
+        it("tuple (third usage)", async () => {
+            await assertReferences({ line: 14, character: 16 }, [
+                { path: mainPath, range: { start: { line: 14, character: 4 }, end: { line: 14, character: 5 } } },
+                { path: mainPath, range: { start: { line: 14, character: 10 }, end: { line: 14, character: 11 } } },
+                { path: mainPath, range: { start: { line: 14, character: 13 }, end: { line: 14, character: 14 } } },
+                { path: mainPath, range: { start: { line: 14, character: 16 }, end: { line: 14, character: 17 } } }
+            ]);
+        });
+
+        it("parens (argument)", async () => {
+            await assertReferences({ line: 15, character: 4 }, [
+                { path: mainPath, range: { start: { line: 15, character: 4 }, end: { line: 15, character: 5 } } },
+                { path: mainPath, range: { start: { line: 15, character: 9 }, end: { line: 15, character: 10 } } }
+            ]);
+        });
+
+        it("parens (usage)", async () => {
+            await assertReferences({ line: 15, character: 9 }, [
+                { path: mainPath, range: { start: { line: 15, character: 4 }, end: { line: 15, character: 5 } } },
+                { path: mainPath, range: { start: { line: 15, character: 9 }, end: { line: 15, character: 10 } } }
+            ]);
+        });
+
+        it("tuple pattern binder (argument)", async () => {
+            await assertReferences({ line: 16, character: 6 }, [
+                { path: mainPath, range: { start: { line: 16, character: 6 }, end: { line: 16, character: 7 } } },
+                { path: mainPath, range: { start: { line: 16, character: 14 }, end: { line: 16, character: 15 } } }
+            ]);
+        });
+
+        it("tuple pattern binder (usage)", async () => {
+            await assertReferences({ line: 16, character: 14 }, [
+                { path: mainPath, range: { start: { line: 16, character: 6 }, end: { line: 16, character: 7 } } },
+                { path: mainPath, range: { start: { line: 16, character: 14 }, end: { line: 16, character: 15 } } }
+            ]);
+        });
+
+        it("alias pattern binder (argument)", async () => {
+            await assertReferences({ line: 17, character: 13 }, [
+                { path: mainPath, range: { start: { line: 17, character: 13 }, end: { line: 17, character: 14 } } },
+                { path: mainPath, range: { start: { line: 17, character: 18 }, end: { line: 17, character: 19 } } }
+            ]);
+        });
+
+        it("alias pattern binder (usage)", async () => {
+            await assertReferences({ line: 17, character: 18 }, [
+                { path: mainPath, range: { start: { line: 17, character: 13 }, end: { line: 17, character: 14 } } },
+                { path: mainPath, range: { start: { line: 17, character: 18 }, end: { line: 17, character: 19 } } }
+            ]);
+        });
+
+        it("paren pattern binder (argument)", async () => {
+            await assertReferences({ line: 18, character: 6 }, [
+                { path: mainPath, range: { start: { line: 18, character: 6 }, end: { line: 18, character: 7 } } },
+                { path: mainPath, range: { start: { line: 18, character: 11 }, end: { line: 18, character: 12 } } }
+            ]);
+        });
+
+        it("paren pattern binder (usage)", async () => {
+            await assertReferences({ line: 18, character: 11 }, [
+                { path: mainPath, range: { start: { line: 18, character: 6 }, end: { line: 18, character: 7 } } },
+                { path: mainPath, range: { start: { line: 18, character: 11 }, end: { line: 18, character: 12 } } }
+            ]);
+        });
+    });
+
+    describe("getHoverInformation", () => {
+        let mainPath, utilPath;
+        let assertHover;
+
+        beforeAll(async () => {
+            const tmpobj = tmp.dirSync();
+            process.chdir(tmpobj.name);
+
+            mainPath = path.join(tmpobj.name, "src", "Main.guida");
+            utilPath = path.join(tmpobj.name, "src", "Util.guida");
+
+            assertHover = async (position, expected) => {
+                const hover = await guida.getHoverInformation(config(), { path: mainPath, position: position });
+                expect(hover).toEqual(expected);
+            }
+
+            await guida.init(config(), { package: false });
+
+            fs.writeFileSync(mainPath, `module Main exposing (..)
+
+{-| Main module documentation... -}
+
+import Util
+
+{-| This is a documented function that does something useful. -}
+documentedFunction = ()
+
+fn = documentedFunction
+
+fn2 = Util.utilFn
+`);
+
+            fs.writeFileSync(utilPath, `module Util exposing (..)
+
+{-| Main module documentation... -}
+
+{-| This is another documented function that does something useful on util. -}
+utilFn = ()
+`);
+        });
+
+        it("returns documentation when hovering on function definition", async () => {
+            await assertHover({ line: 7, character: 0 }, {
+                documentation: " This is a documented function that does something useful. "
+            });
+        });
+
+        it("returns placeholder hover information for documented function", async () => {
+            await assertHover({ line: 9, character: 5 }, {
+                documentation: " This is a documented function that does something useful. "
+            });
+        });
+
+        it("returns documentation when hovering on Util.utilFn definition", async () => {
+            await assertHover({ line: 11, character: 6 }, {
+                documentation: " This is another documented function that does something useful on util. "
+            });
         });
     });
 });

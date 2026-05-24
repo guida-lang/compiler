@@ -29,7 +29,6 @@ import Terminal.Terminal.Internal
         )
 import Text.PrettyPrint.ANSI.Leijen as P
 import Utils.Main as Utils
-import Utils.Task.Extra as Task
 
 
 
@@ -49,7 +48,7 @@ exitFailure =
 exitWith : Exit.ExitCode -> List P.Doc -> Task Never a
 exitWith code docs =
     IO.hIsTerminalDevice IO.stderr
-        |> Task.bind
+        |> Task.andThen
             (\isTerminal ->
                 let
                     adjust : P.Doc -> P.Doc
@@ -65,14 +64,14 @@ exitWith code docs =
                         80
                         (adjust (P.vcat (List.concatMap (\d -> [ d, P.text "" ]) docs)))
                     )
-                    |> Task.bind (\_ -> IO.hPutStrLn IO.stderr "")
-                    |> Task.bind (\_ -> Exit.exitWith code)
+                    |> Task.andThen (\_ -> IO.hPutStrLn IO.stderr "")
+                    |> Task.andThen (\_ -> Exit.exitWith code)
             )
 
 
 getExeName : Task Never String
 getExeName =
-    Task.fmap Utils.fpTakeFileName Utils.envGetProgName
+    Task.map Utils.fpTakeFileName Utils.envGetProgName
 
 
 stack : List P.Doc -> P.Doc
@@ -92,7 +91,7 @@ reflow string =
 exitWithHelp : Maybe String -> String -> P.Doc -> Args -> Flags -> Task Never a
 exitWithHelp maybeCommand details example (Args args) flags =
     toCommand maybeCommand
-        |> Task.bind
+        |> Task.andThen
             (\command ->
                 exitSuccess <|
                     [ reflow details
@@ -114,7 +113,7 @@ exitWithHelp maybeCommand details example (Args args) flags =
 toCommand : Maybe String -> Task Never String
 toCommand maybeCommand =
     getExeName
-        |> Task.fmap
+        |> Task.map
             (\exeName ->
                 case maybeCommand of
                     Nothing ->
@@ -195,7 +194,7 @@ flagsToDocs flags docs =
 exitWithOverview : P.Doc -> P.Doc -> List Command -> Task Never a
 exitWithOverview intro outro commands =
     getExeName
-        |> Task.bind
+        |> Task.andThen
             (\exeName ->
                 exitSuccess
                     [ intro
@@ -253,31 +252,31 @@ toCommandList exeName commands =
 
 exitWithUnknown : String -> List String -> Task Never a
 exitWithUnknown unknown knowns =
-    let
-        nearbyKnowns : List ( Int, String )
-        nearbyKnowns =
-            List.takeWhile (\( r, _ ) -> r <= 3) (Suggest.rank unknown identity knowns)
-
-        suggestions : List P.Doc
-        suggestions =
-            case List.map toGreen (List.map Tuple.second nearbyKnowns) of
-                [] ->
-                    []
-
-                [ nearby ] ->
-                    [ P.text "Try", nearby, P.text "instead?" ]
-
-                [ a, b ] ->
-                    [ P.text "Try", a, P.text "or", b, P.text "instead?" ]
-
-                (_ :: _ :: _ :: _) as abcs ->
-                    P.text "Try"
-                        :: List.map (P.a (P.text ",")) (Prelude.init abcs)
-                        ++ [ P.text "or", Prelude.last abcs, P.text "instead?" ]
-    in
     getExeName
-        |> Task.bind
+        |> Task.andThen
             (\exeName ->
+                let
+                    nearbyKnowns : List ( Int, String )
+                    nearbyKnowns =
+                        List.takeWhile (\( r, _ ) -> r <= 3) (Suggest.rank unknown identity knowns)
+
+                    suggestions : List P.Doc
+                    suggestions =
+                        case List.map toGreen (List.map Tuple.second nearbyKnowns) of
+                            [] ->
+                                []
+
+                            [ nearby ] ->
+                                [ P.text "Try", nearby, P.text "instead?" ]
+
+                            [ a, b ] ->
+                                [ P.text "Try", a, P.text "or", b, P.text "instead?" ]
+
+                            (_ :: _ :: _ :: _) as abcs ->
+                                P.text "Try"
+                                    :: List.map (P.a (P.text ",")) (Prelude.init abcs)
+                                    ++ [ P.text "or", Prelude.last abcs, P.text "instead?" ]
+                in
                 exitFailure
                     [ P.fillSep <|
                         [ P.text "There"
@@ -298,7 +297,7 @@ exitWithUnknown unknown knowns =
 
 exitWithError : Error -> Task Never a
 exitWithError err =
-    Task.bind exitFailure
+    Task.andThen exitFailure
         (case err of
             BadFlag flagError ->
                 flagErrorToDocs flagError
@@ -306,7 +305,7 @@ exitWithError err =
             BadArgs argErrors ->
                 case argErrors of
                     [] ->
-                        Task.pure
+                        Task.succeed
                             [ reflow <| "I was not expecting any arguments for this command."
                             , reflow <| "Try removing them?"
                             ]
@@ -356,7 +355,7 @@ argErrorToDocs argError =
     case argError of
         ArgMissing (Expectation tipe makeExamples) ->
             makeExamples
-                |> Task.fmap
+                |> Task.map
                     (\examples ->
                         [ P.fillSep
                             [ P.text "The"
@@ -383,7 +382,7 @@ argErrorToDocs argError =
 
         ArgBad string (Expectation tipe makeExamples) ->
             makeExamples
-                |> Task.fmap
+                |> Task.map
                     (\examples ->
                         [ P.text "I am having trouble with this argument:"
                         , P.indent 4 <| toRed string
@@ -421,7 +420,7 @@ argErrorToDocs argError =
                         _ ->
                             ( "these arguments", "them" )
             in
-            Task.pure
+            Task.succeed
                 [ reflow <| "I was not expecting " ++ these ++ ":"
                 , P.indent 4 <| P.red <| P.vcat <| List.map P.text extras
                 , reflow <| "Try removing " ++ them ++ "?"
@@ -434,7 +433,7 @@ argErrorToDocs argError =
 
 flagErrorHelp : String -> String -> List P.Doc -> Task Never (List P.Doc)
 flagErrorHelp summary original explanation =
-    Task.pure <|
+    Task.succeed <|
         [ reflow summary
         , P.indent 4 (toRed original)
         ]
@@ -454,7 +453,7 @@ flagErrorToDocs flagError =
 
         FlagWithNoValue flagName (Expectation tipe makeExamples) ->
             makeExamples
-                |> Task.bind
+                |> Task.andThen
                     (\examples ->
                         flagErrorHelp
                             "This flag needs more information:"
@@ -481,7 +480,7 @@ flagErrorToDocs flagError =
 
         FlagWithBadValue flagName badValue (Expectation tipe makeExamples) ->
             makeExamples
-                |> Task.bind
+                |> Task.andThen
                     (\examples ->
                         flagErrorHelp
                             "This flag was given a bad value:"

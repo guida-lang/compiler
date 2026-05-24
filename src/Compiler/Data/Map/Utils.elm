@@ -7,7 +7,6 @@ module Compiler.Data.Map.Utils exposing
 import Data.Map as Dict exposing (Dict)
 import Task exposing (Task)
 import Utils.Main as Utils
-import Utils.Task.Extra as Task
 
 
 
@@ -21,7 +20,7 @@ fromKeys toValue keys =
 
 fromKeysA : (k -> comparable) -> (k -> Task Never v) -> List k -> Task Never (Dict comparable k v)
 fromKeysA toComparable toValue keys =
-    Task.fmap (Dict.fromList toComparable) (Utils.listTraverse (\k -> Task.fmap (Tuple.pair k) (toValue k)) keys)
+    Task.map (Dict.fromList toComparable) (Utils.listTraverse (\k -> Task.map (Tuple.pair k) (toValue k)) keys)
 
 
 

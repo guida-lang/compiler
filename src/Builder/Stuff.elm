@@ -39,7 +39,6 @@ import Utils.Bytes.Decode as BD
 import Utils.Bytes.Encode as BE
 import Utils.Crash exposing (crash)
 import Utils.Main as Utils
-import Utils.Task.Extra as Task
 
 
 
@@ -185,7 +184,7 @@ rootMap f root =
 findRoot : Task Never (Maybe Root)
 findRoot =
     Utils.dirGetCurrentDirectory
-        |> Task.bind
+        |> Task.andThen
             (\dir ->
                 findRootHelp (Utils.fpSplitDirectories dir)
             )
@@ -195,21 +194,21 @@ findRootHelp : List String -> Task Never (Maybe Root)
 findRootHelp dirs =
     case dirs of
         [] ->
-            Task.pure Nothing
+            Task.succeed Nothing
 
         _ :: _ ->
             Utils.dirDoesFileExist (Utils.fpJoinPath dirs ++ "/guida.json")
-                |> Task.bind
+                |> Task.andThen
                     (\guidaExists ->
                         if guidaExists then
-                            Task.pure (Just (GuidaRoot (Utils.fpJoinPath dirs)))
+                            Task.succeed (Just (GuidaRoot (Utils.fpJoinPath dirs)))
 
                         else
                             Utils.dirDoesFileExist (Utils.fpJoinPath dirs ++ "/elm.json")
-                                |> Task.bind
+                                |> Task.andThen
                                     (\elmExists ->
                                         if elmExists then
-                                            Task.pure (Just (ElmRoot TopLevel (Utils.fpJoinPath dirs)))
+                                            Task.succeed (Just (ElmRoot TopLevel (Utils.fpJoinPath dirs)))
 
                                         else
                                             findRootHelp (Prelude.init dirs)
@@ -234,7 +233,7 @@ withRootLock root work =
             stuff root
     in
     Utils.dirCreateDirectoryIfMissing True dir
-        |> Task.bind
+        |> Task.andThen
             (\_ ->
                 Utils.lockWithFileLock (dir ++ "/lock") Utils.LockExclusive (\_ -> work)
             )
@@ -255,7 +254,7 @@ type PackageCache
 
 getPackageCache : Task Never PackageCache
 getPackageCache =
-    Task.fmap PackageCache (getCacheDir "packages")
+    Task.map PackageCache (getCacheDir "packages")
 
 
 registry : PackageCache -> String
@@ -280,7 +279,7 @@ getReplCache =
 getCacheDir : String -> Task Never String
 getCacheDir projectName =
     getGuidaHome
-        |> Task.bind
+        |> Task.andThen
             (\home ->
                 let
                     root : Utils.FilePath
@@ -288,18 +287,18 @@ getCacheDir projectName =
                         Utils.fpCombine home (Utils.fpCombine compilerVersion projectName)
                 in
                 Utils.dirCreateDirectoryIfMissing True root
-                    |> Task.fmap (\_ -> root)
+                    |> Task.map (\_ -> root)
             )
 
 
 getGuidaHome : Task Never String
 getGuidaHome =
     Utils.envLookupEnv "GUIDA_HOME"
-        |> Task.bind
+        |> Task.andThen
             (\maybeCustomHome ->
                 case maybeCustomHome of
                     Just customHome ->
-                        Task.pure customHome
+                        Task.succeed customHome
 
                     Nothing ->
                         Utils.dirGetAppUserDataDirectory "guida"

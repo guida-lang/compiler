@@ -62,11 +62,11 @@ type Flags
 run : () -> Flags -> Task Never ()
 run () flags =
     printWelcomeMessage
-        |> Task.bind (\_ -> initSettings)
-        |> Task.bind
+        |> Task.andThen (\_ -> initSettings)
+        |> Task.andThen
             (\settings ->
                 initEnv flags
-                    |> Task.bind
+                    |> Task.andThen
                         (\env ->
                             let
                                 looper : M Exit.ExitCode
@@ -74,7 +74,7 @@ run () flags =
                                     Utils.replRunInputT settings (Utils.replWithInterrupt (loop env IO.initialReplState))
                             in
                             State.evalStateT looper IO.initialReplState
-                                |> Task.bind (\exitCode -> Exit.exitWith exitCode)
+                                |> Task.andThen (\exitCode -> Exit.exitWith exitCode)
                         )
             )
 
@@ -124,10 +124,10 @@ type Env
 initEnv : Flags -> Task Never Env
 initEnv (Flags maybeAlternateInterpreter noColors) =
     getRoot
-        |> Task.bind
+        |> Task.andThen
             (\root ->
                 getInterpreter maybeAlternateInterpreter
-                    |> Task.fmap
+                    |> Task.map
                         (\interpreter ->
                             Env root interpreter (not noColors)
                         )
@@ -150,18 +150,18 @@ type alias M a =
 loop : Env -> IO.ReplState -> Utils.ReplInputT Exit.ExitCode
 loop ((Env root _ _) as env) state =
     read root
-        |> Task.bind
+        |> Task.andThen
             (\input ->
                 Utils.liftIOInputT (eval env state input)
-                    |> Task.bind
+                    |> Task.andThen
                         (\outcome ->
                             case outcome of
                                 Loop loopState ->
                                     Utils.liftInputT (State.put loopState)
-                                        |> Task.bind (\_ -> loop env loopState)
+                                        |> Task.andThen (\_ -> loop env loopState)
 
                                 End exitCode ->
-                                    Task.pure exitCode
+                                    Task.succeed exitCode
                         )
             )
 
@@ -186,11 +186,11 @@ type Input
 read : Stuff.Root -> Utils.ReplInputT Input
 read root =
     Utils.replGetInputLine "> "
-        |> Task.bind
+        |> Task.andThen
             (\maybeLine ->
                 case maybeLine of
                     Nothing ->
-                        Task.pure Exit
+                        Task.succeed Exit
 
                     Just chars ->
                         let
@@ -200,7 +200,7 @@ read root =
                         in
                         case categorize root lines of
                             Done input ->
-                                Task.pure input
+                                Task.succeed input
 
                             Continue p ->
                                 readMore root lines p
@@ -210,11 +210,11 @@ read root =
 readMore : Stuff.Root -> Lines -> Prefill -> Utils.ReplInputT Input
 readMore root previousLines prefill =
     Utils.replGetInputLineWithInitial "| " ( renderPrefill prefill, "" )
-        |> Task.bind
+        |> Task.andThen
             (\input ->
                 case input of
                     Nothing ->
-                        Task.pure Skip
+                        Task.succeed Skip
 
                     Just chars ->
                         let
@@ -224,7 +224,7 @@ readMore root previousLines prefill =
                         in
                         case categorize root lines of
                             Done doneInput ->
-                                Task.pure doneInput
+                                Task.succeed doneInput
 
                             Continue p ->
                                 readMore root lines p
@@ -519,18 +519,18 @@ eval : Env -> IO.ReplState -> Input -> Task Never Outcome
 eval env ((IO.ReplState imports types decls) as state) input =
     case input of
         Skip ->
-            Task.pure (Loop state)
+            Task.succeed (Loop state)
 
         Exit ->
-            Task.pure (End Exit.ExitSuccess)
+            Task.succeed (End Exit.ExitSuccess)
 
         Reset ->
             IO.putStrLn "<reset>"
-                |> Task.fmap (\_ -> Loop IO.initialReplState)
+                |> Task.map (\_ -> Loop IO.initialReplState)
 
         Help maybeUnknownCommand ->
             IO.putStrLn (toHelpMessage maybeUnknownCommand)
-                |> Task.fmap (\_ -> Loop state)
+                |> Task.map (\_ -> Loop state)
 
         Import name src ->
             let
@@ -538,7 +538,7 @@ eval env ((IO.ReplState imports types decls) as state) input =
                 newState =
                     IO.ReplState (Dict.insert name src imports) types decls
             in
-            Task.fmap Loop (attemptEval env state newState OutputNothing)
+            Task.map Loop (attemptEval env state newState OutputNothing)
 
         Type name src ->
             let
@@ -546,11 +546,11 @@ eval env ((IO.ReplState imports types decls) as state) input =
                 newState =
                     IO.ReplState imports (Dict.insert name src types) decls
             in
-            Task.fmap Loop (attemptEval env state newState OutputNothing)
+            Task.map Loop (attemptEval env state newState OutputNothing)
 
         Port ->
             IO.putStrLn "I cannot handle port declarations."
-                |> Task.fmap (\_ -> Loop state)
+                |> Task.map (\_ -> Loop state)
 
         Decl name src ->
             let
@@ -558,10 +558,10 @@ eval env ((IO.ReplState imports types decls) as state) input =
                 newState =
                     IO.ReplState imports types (Dict.insert name src decls)
             in
-            Task.fmap Loop (attemptEval env state newState (OutputDecl name))
+            Task.map Loop (attemptEval env state newState (OutputDecl name))
 
         Expr src ->
-            Task.fmap Loop (attemptEval env state state (OutputExpr src))
+            Task.map Loop (attemptEval env state state (OutputExpr src))
 
 
 
@@ -582,11 +582,11 @@ attemptEval (Env root interpreter ansi) oldState newState output =
                 (Task.run
                     (Task.eio Exit.ReplBadDetails
                         (Details.load Reporting.silent scope root)
-                        |> Task.bind
+                        |> Task.andThen
                             (\details ->
                                 Task.eio identity
                                     (Build.fromRepl root details (toByteString newState output))
-                                    |> Task.bind
+                                    |> Task.andThen
                                         (\artifacts ->
                                             Utils.maybeTraverseTask (Task.mapError Exit.ReplBadGenerate << Generate.repl (Stuff.rootToTarget root) (Stuff.rootPath root) details ansi artifacts) (toPrintName output)
                                         )
@@ -594,19 +594,19 @@ attemptEval (Env root interpreter ansi) oldState newState output =
                     )
                 )
         )
-        |> Task.bind
+        |> Task.andThen
             (\result ->
                 case result of
                     Err exit ->
                         Exit.toStderr (Exit.replToReport exit)
-                            |> Task.fmap (\_ -> oldState)
+                            |> Task.map (\_ -> oldState)
 
                     Ok Nothing ->
-                        Task.pure newState
+                        Task.succeed newState
 
                     Ok (Just javascript) ->
                         interpret interpreter javascript
-                            |> Task.fmap
+                            |> Task.map
                                 (\exitCode ->
                                     case exitCode of
                                         Exit.ExitSuccess ->
@@ -631,8 +631,8 @@ interpret interpreter javascript =
             case stdinHandle of
                 Just stdin ->
                     Utils.builderHPutBuilder stdin javascript
-                        |> Task.bind (\_ -> IO.hClose stdin)
-                        |> Task.bind (\_ -> Process.waitForProcess handle)
+                        |> Task.andThen (\_ -> IO.hClose stdin)
+                        |> Task.andThen (\_ -> Process.waitForProcess handle)
 
                 Nothing ->
                     crash "not implemented"
@@ -714,15 +714,15 @@ genericHelpMessage =
 getRoot : Task Never Stuff.Root
 getRoot =
     Stuff.findRoot
-        |> Task.bind
+        |> Task.andThen
             (\maybeRoot ->
                 case maybeRoot of
                     Just root ->
-                        Task.pure root
+                        Task.succeed root
 
                     Nothing ->
                         Stuff.getReplCache
-                            |> Task.bind
+                            |> Task.andThen
                                 (\cache ->
                                     let
                                         root : Stuff.Root
@@ -730,7 +730,7 @@ getRoot =
                                             Stuff.GuidaRoot (cache ++ "/tmp")
                                     in
                                     Utils.dirCreateDirectoryIfMissing True (Stuff.rootPath root ++ "/src")
-                                        |> Task.bind
+                                        |> Task.andThen
                                             (\_ ->
                                                 Outline.write root <|
                                                     Outline.Pkg <|
@@ -744,7 +744,7 @@ getRoot =
                                                             Map.empty
                                                             C.defaultGuida
                                             )
-                                        |> Task.fmap (\_ -> root)
+                                        |> Task.map (\_ -> root)
                                 )
             )
 
@@ -769,10 +769,10 @@ getInterpreter maybeName =
         Nothing ->
             getInterpreterHelp "node` or `nodejs" <|
                 (Utils.dirFindExecutable "node"
-                    |> Task.bind
+                    |> Task.andThen
                         (\exe1 ->
                             Utils.dirFindExecutable "nodejs"
-                                |> Task.fmap (\exe2 -> Maybe.or exe1 exe2)
+                                |> Task.map (\exe2 -> Maybe.or exe1 exe2)
                         )
                 )
 
@@ -780,15 +780,15 @@ getInterpreter maybeName =
 getInterpreterHelp : String -> Task Never (Maybe FilePath) -> Task Never FilePath
 getInterpreterHelp name findExe =
     findExe
-        |> Task.bind
+        |> Task.andThen
             (\maybePath ->
                 case maybePath of
                     Just path ->
-                        Task.pure path
+                        Task.succeed path
 
                     Nothing ->
                         IO.hPutStrLn IO.stderr (exeNotFound name)
-                            |> Task.bind (\_ -> Exit.exitFailure)
+                            |> Task.andThen (\_ -> Exit.exitFailure)
             )
 
 
@@ -809,7 +809,7 @@ exeNotFound name =
 initSettings : Task Never Utils.ReplSettings
 initSettings =
     Stuff.getReplCache
-        |> Task.fmap
+        |> Task.map
             (\cache ->
                 Utils.ReplSettings
                     { historyFile = Just (cache ++ "/history")

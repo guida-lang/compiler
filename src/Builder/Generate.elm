@@ -40,29 +40,32 @@ import Utils.Task.Extra as Task
 debug : Bool -> Int -> Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
 debug withSourceMaps leadingLines root details (Build.Artifacts _ pkg ifaces roots modules) =
     loadObjects (Stuff.rootPath root) details modules
-        |> Task.bind
+        |> Task.andThen
             (\loading ->
                 loadTypes (Stuff.rootPath root) ifaces modules
-                    |> Task.bind
+                    |> Task.andThen
                         (\types ->
                             finalizeObjects loading
-                                |> Task.bind
+                                |> Task.andThen
                                     (\objects ->
-                                        let
-                                            mode : Mode.Mode
-                                            mode =
-                                                Mode.Dev (Just types)
-
-                                            graph : Opt.GlobalGraph
-                                            graph =
-                                                objectsToGlobalGraph objects
-
-                                            mains : Dict (List String) TypeCheck.Canonical Opt.Main
-                                            mains =
-                                                gatherMains pkg objects roots
-                                        in
                                         prepareSourceMaps withSourceMaps root
-                                            |> Task.fmap (\sourceMaps -> JS.generate (Stuff.rootToTarget root) sourceMaps leadingLines mode graph mains)
+                                            |> Task.map
+                                                (\sourceMaps ->
+                                                    let
+                                                        mode : Mode.Mode
+                                                        mode =
+                                                            Mode.Dev (Just types)
+
+                                                        graph : Opt.GlobalGraph
+                                                        graph =
+                                                            objectsToGlobalGraph objects
+
+                                                        mains : Dict (List String) TypeCheck.Canonical Opt.Main
+                                                        mains =
+                                                            gatherMains pkg objects roots
+                                                    in
+                                                    JS.generate (Stuff.rootToTarget root) sourceMaps leadingLines mode graph mains
+                                                )
                                     )
                         )
             )
@@ -70,50 +73,56 @@ debug withSourceMaps leadingLines root details (Build.Artifacts _ pkg ifaces roo
 
 dev : Bool -> Int -> Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
 dev withSourceMaps leadingLines root details (Build.Artifacts _ pkg _ roots modules) =
-    Task.bind finalizeObjects (loadObjects (Stuff.rootPath root) details modules)
-        |> Task.bind
+    Task.andThen finalizeObjects (loadObjects (Stuff.rootPath root) details modules)
+        |> Task.andThen
             (\objects ->
-                let
-                    mode : Mode.Mode
-                    mode =
-                        Mode.Dev Nothing
-
-                    graph : Opt.GlobalGraph
-                    graph =
-                        objectsToGlobalGraph objects
-
-                    mains : Dict (List String) TypeCheck.Canonical Opt.Main
-                    mains =
-                        gatherMains pkg objects roots
-                in
                 prepareSourceMaps withSourceMaps root
-                    |> Task.fmap (\sourceMaps -> JS.generate (Stuff.rootToTarget root) sourceMaps leadingLines mode graph mains)
-            )
-
-
-prod : Bool -> Int -> Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
-prod withSourceMaps leadingLines root details (Build.Artifacts _ pkg _ roots modules) =
-    Task.bind finalizeObjects (loadObjects (Stuff.rootPath root) details modules)
-        |> Task.bind
-            (\objects ->
-                checkForDebugUses objects
-                    |> Task.bind
-                        (\_ ->
+                    |> Task.map
+                        (\sourceMaps ->
                             let
+                                mode : Mode.Mode
+                                mode =
+                                    Mode.Dev Nothing
+
                                 graph : Opt.GlobalGraph
                                 graph =
                                     objectsToGlobalGraph objects
-
-                                mode : Mode.Mode
-                                mode =
-                                    Mode.Prod (Mode.shortenFieldNames graph)
 
                                 mains : Dict (List String) TypeCheck.Canonical Opt.Main
                                 mains =
                                     gatherMains pkg objects roots
                             in
+                            JS.generate (Stuff.rootToTarget root) sourceMaps leadingLines mode graph mains
+                        )
+            )
+
+
+prod : Bool -> Int -> Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
+prod withSourceMaps leadingLines root details (Build.Artifacts _ pkg _ roots modules) =
+    Task.andThen finalizeObjects (loadObjects (Stuff.rootPath root) details modules)
+        |> Task.andThen
+            (\objects ->
+                checkForDebugUses objects
+                    |> Task.andThen
+                        (\_ ->
                             prepareSourceMaps withSourceMaps root
-                                |> Task.fmap (\sourceMaps -> JS.generate (Stuff.rootToTarget root) sourceMaps leadingLines mode graph mains)
+                                |> Task.map
+                                    (\sourceMaps ->
+                                        let
+                                            graph : Opt.GlobalGraph
+                                            graph =
+                                                objectsToGlobalGraph objects
+
+                                            mode : Mode.Mode
+                                            mode =
+                                                Mode.Prod (Mode.shortenFieldNames graph)
+
+                                            mains : Dict (List String) TypeCheck.Canonical Opt.Main
+                                            mains =
+                                                gatherMains pkg objects roots
+                                        in
+                                        JS.generate (Stuff.rootToTarget root) sourceMaps leadingLines mode graph mains
+                                    )
                         )
             )
 
@@ -122,18 +131,18 @@ prepareSourceMaps : Bool -> Stuff.Root -> Task Exit.Generate JS.SourceMaps
 prepareSourceMaps withSourceMaps root =
     if withSourceMaps then
         Outline.getAllModulePaths root
-            |> Task.bind (Utils.mapTraverse ModuleName.toComparableCanonical ModuleName.compareCanonical File.readUtf8)
-            |> Task.fmap JS.SourceMaps
+            |> Task.andThen (Utils.mapTraverse ModuleName.toComparableCanonical ModuleName.compareCanonical File.readUtf8)
+            |> Task.map JS.SourceMaps
             |> Task.io
 
     else
-        Task.pure JS.NoSourceMaps
+        Task.succeed JS.NoSourceMaps
 
 
 repl : Target -> FilePath -> Details.Details -> Bool -> Build.ReplArtifacts -> N.Name -> Task Exit.Generate String
 repl target root details ansi (Build.ReplArtifacts home modules localizer annotations) name =
-    Task.bind finalizeObjects (loadObjects root details modules)
-        |> Task.fmap
+    Task.andThen finalizeObjects (loadObjects root details modules)
+        |> Task.map
             (\objects ->
                 let
                     graph : Opt.GlobalGraph
@@ -152,10 +161,10 @@ checkForDebugUses : Objects -> Task Exit.Generate ()
 checkForDebugUses (Objects _ locals) =
     case Dict.keys compare (Dict.filter (\_ -> Nitpick.hasDebugUses) locals) of
         [] ->
-            Task.pure ()
+            Task.succeed ()
 
         m :: ms ->
-            Task.throw (Exit.GenerateCannotOptimizeDebugValues m ms)
+            Task.fail (Exit.GenerateCannotOptimizeDebugValues m ms)
 
 
 
@@ -194,10 +203,10 @@ loadObjects : FilePath -> Details.Details -> List Build.Module -> Task Exit.Gene
 loadObjects root details modules =
     Task.io
         (Details.loadObjects root details
-            |> Task.bind
+            |> Task.andThen
                 (\mvar ->
                     Utils.listTraverse (loadObject root) modules
-                        |> Task.fmap
+                        |> Task.map
                             (\mvars ->
                                 LoadingObjects mvar (Dict.fromList identity mvars)
                             )
@@ -210,14 +219,14 @@ loadObject root modul =
     case modul of
         Build.Fresh name _ graph ->
             Utils.newMVar (Utils.maybeEncoder Opt.localGraphEncoder) (Just graph)
-                |> Task.fmap (\mvar -> ( name, mvar ))
+                |> Task.map (\mvar -> ( name, mvar ))
 
         Build.Cached name _ _ ->
             Utils.newEmptyMVar
-                |> Task.bind
+                |> Task.andThen
                     (\mvar ->
-                        Utils.forkIO (Task.bind (Utils.putMVar (Utils.maybeEncoder Opt.localGraphEncoder) mvar) (File.readBinary Opt.localGraphDecoder (Stuff.guidao root name)))
-                            |> Task.fmap (\_ -> ( name, mvar ))
+                        Utils.forkIO (Task.andThen (Utils.putMVar (Utils.maybeEncoder Opt.localGraphEncoder) mvar) (File.readBinary Opt.localGraphDecoder (Stuff.guidao root name)))
+                            |> Task.map (\_ -> ( name, mvar ))
                     )
 
 
@@ -233,10 +242,10 @@ finalizeObjects : LoadingObjects -> Task Exit.Generate Objects
 finalizeObjects (LoadingObjects mvar mvars) =
     Task.eio identity
         (Utils.readMVar (BD.maybe Opt.globalGraphDecoder) mvar
-            |> Task.bind
+            |> Task.andThen
                 (\result ->
                     Utils.mapTraverse identity compare (Utils.readMVar (BD.maybe Opt.localGraphDecoder)) mvars
-                        |> Task.fmap
+                        |> Task.map
                             (\results ->
                                 case Maybe.map2 Objects result (Utils.sequenceDictMaybe identity compare results) of
                                     Just loaded ->
@@ -262,18 +271,18 @@ loadTypes : FilePath -> Dict (List String) TypeCheck.Canonical I.DependencyInter
 loadTypes root ifaces modules =
     Task.eio identity
         (Utils.listTraverse (loadTypesHelp root) modules
-            |> Task.bind
+            |> Task.andThen
                 (\mvars ->
-                    let
-                        foreigns : Extract.Types
-                        foreigns =
-                            Extract.mergeMany (Dict.values ModuleName.compareCanonical (Dict.map Extract.fromDependencyInterface ifaces))
-                    in
                     Utils.listTraverse (Utils.readMVar (BD.maybe Extract.typesDecoder)) mvars
-                        |> Task.fmap
+                        |> Task.map
                             (\results ->
                                 case Utils.sequenceListMaybe results of
                                     Just ts ->
+                                        let
+                                            foreigns : Extract.Types
+                                            foreigns =
+                                                Extract.mergeMany (Dict.values ModuleName.compareCanonical (Dict.map Extract.fromDependencyInterface ifaces))
+                                        in
                                         Ok (Extract.merge foreigns (Extract.mergeMany ts))
 
                                     Nothing ->
@@ -291,21 +300,21 @@ loadTypesHelp root modul =
 
         Build.Cached name _ ciMVar ->
             Utils.readMVar Build.cachedInterfaceDecoder ciMVar
-                |> Task.bind
+                |> Task.andThen
                     (\cachedInterface ->
                         case cachedInterface of
                             Build.Unneeded ->
                                 Utils.newEmptyMVar
-                                    |> Task.bind
+                                    |> Task.andThen
                                         (\mvar ->
                                             Utils.forkIO
                                                 (File.readBinary I.interfaceDecoder (Stuff.guidai root name)
-                                                    |> Task.bind
+                                                    |> Task.andThen
                                                         (\maybeIface ->
                                                             Utils.putMVar (Utils.maybeEncoder Extract.typesEncoder) mvar (Maybe.map (Extract.fromInterface name) maybeIface)
                                                         )
                                                 )
-                                                |> Task.fmap (\_ -> mvar)
+                                                |> Task.map (\_ -> mvar)
                                         )
 
                             Build.Loaded iface ->

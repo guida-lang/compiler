@@ -1,14 +1,17 @@
 module API.Main exposing (main)
 
+import API.Diagnostics as Diagnostics
 import API.Format as Format
-import API.GetDefinitionLocation as GetDefinitionLocation
 import API.Init as Init
 import API.Install as Install
+import API.LanguageServerProtocol as LanguageServerProtocol
 import API.Make as Make
 import API.Uninstall as Uninstall
 import API.Upgrade as Upgrade
+import Builder.Deps.Solver as Solver
 import Builder.Reporting.Exit as Exit
-import Compiler.Generate.Target as Target
+import Builder.Stuff as Stuff
+import Compiler.Generate.Target as Target exposing (Target)
 import Compiler.Guida.Package as Pkg
 import Compiler.Json.Encode as E
 import Compiler.Parse.Module as M
@@ -17,12 +20,14 @@ import Compiler.Parse.SyntaxVersion as SV
 import Compiler.Reporting.Error as Error
 import Compiler.Reporting.Error.Syntax as E
 import Compiler.Reporting.Render.Code as Code
+import Compiler.Reporting.Render.Type.Localizer as L
+import Compiler.Reporting.Report as Report
+import Compiler.Reporting.Warning as W
 import Json.Decode as Decode
 import Json.Encode as Encode
 import System.IO as IO
 import Task exposing (Task)
 import Utils.Impure as Impure
-import Utils.Task.Extra as Task
 
 
 main : IO.Program
@@ -33,12 +38,12 @@ main =
 app : Task Never ()
 app =
     getArgs
-        |> Task.bind
+        |> Task.andThen
             (\args ->
                 case args of
                     InitArgs package ->
                         Init.run (Init.Flags package)
-                            |> Task.bind
+                            |> Task.andThen
                                 (\result ->
                                     case result of
                                         Ok () ->
@@ -50,7 +55,7 @@ app =
 
                     MakeArgs path debug optimize withSourceMaps ->
                         Make.run path (Make.Flags debug optimize withSourceMaps)
-                            |> Task.bind
+                            |> Task.andThen
                                 (\result ->
                                     case result of
                                         Ok ( output, warnings ) ->
@@ -84,7 +89,7 @@ app =
                         case P.fromByteString Pkg.parser Tuple.pair pkgString of
                             Ok pkg ->
                                 Install.run pkg
-                                    |> Task.bind (\_ -> exitWithResponse Encode.null)
+                                    |> Task.andThen (\_ -> exitWithResponse Encode.null)
 
                             Err _ ->
                                 exitWithResponse (Encode.object [ ( "error", Encode.string "Invalid package..." ) ])
@@ -93,14 +98,14 @@ app =
                         case P.fromByteString Pkg.parser Tuple.pair pkgString of
                             Ok pkg ->
                                 Uninstall.run pkg
-                                    |> Task.bind (\_ -> exitWithResponse Encode.null)
+                                    |> Task.andThen (\_ -> exitWithResponse Encode.null)
 
                             Err _ ->
                                 exitWithResponse (Encode.object [ ( "error", Encode.string "Invalid package..." ) ])
 
                     UpgradeArgs ->
                         Upgrade.run
-                            |> Task.bind (\_ -> exitWithResponse Encode.null)
+                            |> Task.andThen (\_ -> exitWithResponse Encode.null)
 
                     DiagnosticsArgs (DiagnosticsSourceContent src) ->
                         -- FIXME target
@@ -128,12 +133,36 @@ app =
                                     )
 
                     DiagnosticsArgs (DiagnosticsSourcePath path) ->
-                        Make.run path (Make.Flags False False False)
-                            |> Task.bind
+                        Diagnostics.run path
+                            |> Task.andThen
                                 (\result ->
                                     case result of
-                                        Ok _ ->
-                                            exitWithResponse Encode.null
+                                        Ok ( root, warnModules ) ->
+                                            let
+                                                target : Target
+                                                target =
+                                                    Stuff.rootToTarget root
+
+                                                warningToReport : W.Module -> Report.WarningModuleReport
+                                                warningToReport { absolutePath, name, source, warnings } =
+                                                    { path = absolutePath
+                                                    , name = name
+                                                    , warnings = List.map (W.toReport target L.empty (Code.toSource source)) warnings
+                                                    }
+                                            in
+                                            exitWithResponse
+                                                (Encode.object
+                                                    [ ( "type", Encode.string "warnings" )
+                                                    , ( "warnings"
+                                                      , warnModules
+                                                            |> List.map warningToReport
+                                                            |> E.list Error.warningReportToJson
+                                                            |> E.encodeUgly
+                                                            |> Decode.decodeString Decode.value
+                                                            |> Result.withDefault Encode.null
+                                                      )
+                                                    ]
+                                                )
 
                                         Err error ->
                                             exitWithResponse
@@ -143,33 +172,126 @@ app =
                                                 )
                                 )
 
-                    GetDefinitionLocationArgs uri line character ->
-                        GetDefinitionLocation.run uri line character
-                            |> Task.bind
+                    GetDefinitionLocationArgs path line character ->
+                        Solver.initEnv
+                            |> Task.andThen
+                                (\eitherEnv ->
+                                    case eitherEnv of
+                                        Err _ ->
+                                            exitWithResponse Encode.null
+
+                                        Ok _ ->
+                                            LanguageServerProtocol.getDefinitionLocation path line character
+                                                |> Task.andThen
+                                                    (\result ->
+                                                        case result of
+                                                            Ok location ->
+                                                                exitWithResponse
+                                                                    (Encode.object
+                                                                        [ ( "path", Encode.string location.path )
+                                                                        , ( "range"
+                                                                          , Encode.object
+                                                                                [ ( "start"
+                                                                                  , Encode.object
+                                                                                        [ ( "line", Encode.int location.range.start.line )
+                                                                                        , ( "character", Encode.int location.range.start.character )
+                                                                                        ]
+                                                                                  )
+                                                                                , ( "end"
+                                                                                  , Encode.object
+                                                                                        [ ( "line", Encode.int location.range.end.line )
+                                                                                        , ( "character", Encode.int location.range.end.character )
+                                                                                        ]
+                                                                                  )
+                                                                                ]
+                                                                          )
+                                                                        ]
+                                                                    )
+
+                                                            Err _ ->
+                                                                exitWithResponse Encode.null
+                                                    )
+                                )
+
+                    FindReferencesArgs path line character ->
+                        LanguageServerProtocol.findReferences path line character
+                            |> Task.andThen
                                 (\result ->
                                     case result of
-                                        Ok location ->
+                                        Ok locations ->
                                             exitWithResponse
-                                                (Encode.object
-                                                    [ ( "uri", Encode.string location.uri )
-                                                    , ( "range"
-                                                      , Encode.object
-                                                            [ ( "start"
+                                                (Encode.list
+                                                    (\location ->
+                                                        Encode.object
+                                                            [ ( "path", Encode.string location.path )
+                                                            , ( "range"
                                                               , Encode.object
-                                                                    [ ( "line", Encode.int location.range.start.line )
-                                                                    , ( "character", Encode.int location.range.start.character )
-                                                                    ]
-                                                              )
-                                                            , ( "end"
-                                                              , Encode.object
-                                                                    [ ( "line", Encode.int location.range.end.line )
-                                                                    , ( "character", Encode.int location.range.end.character )
+                                                                    [ ( "start"
+                                                                      , Encode.object
+                                                                            [ ( "line", Encode.int location.range.start.line )
+                                                                            , ( "character", Encode.int location.range.start.character )
+                                                                            ]
+                                                                      )
+                                                                    , ( "end"
+                                                                      , Encode.object
+                                                                            [ ( "line", Encode.int location.range.end.line )
+                                                                            , ( "character", Encode.int location.range.end.character )
+                                                                            ]
+                                                                      )
                                                                     ]
                                                               )
                                                             ]
-                                                      )
-                                                    ]
+                                                    )
+                                                    locations
                                                 )
+
+                                        Err _ ->
+                                            exitWithResponse Encode.null
+                                )
+
+                    GetHoverInformationArgs path line character ->
+                        LanguageServerProtocol.getHoverInformation path line character
+                            |> Task.andThen
+                                (\result ->
+                                    case result of
+                                        Ok maybeHover ->
+                                            case maybeHover of
+                                                Just hover ->
+                                                    let
+                                                        rangeFields : List ( String, Encode.Value )
+                                                        rangeFields =
+                                                            case hover.range of
+                                                                Just range ->
+                                                                    [ ( "range"
+                                                                      , Encode.object
+                                                                            [ ( "start"
+                                                                              , Encode.object
+                                                                                    [ ( "line", Encode.int range.start.line )
+                                                                                    , ( "character", Encode.int range.start.character )
+                                                                                    ]
+                                                                              )
+                                                                            , ( "end"
+                                                                              , Encode.object
+                                                                                    [ ( "line", Encode.int range.end.line )
+                                                                                    , ( "character", Encode.int range.end.character )
+                                                                                    ]
+                                                                              )
+                                                                            ]
+                                                                      )
+                                                                    ]
+
+                                                                Nothing ->
+                                                                    []
+                                                    in
+                                                    exitWithResponse
+                                                        (Encode.object
+                                                            (( "documentation", Encode.string hover.documentation )
+                                                                :: rangeFields
+                                                            )
+                                                        )
+
+                                                Nothing ->
+                                                    exitWithResponse Encode.null
 
                                         Err _ ->
                                             exitWithResponse Encode.null
@@ -200,6 +322,8 @@ type Args
     | UpgradeArgs
     | DiagnosticsArgs DiagnosticsSource
     | GetDefinitionLocationArgs String Int Int
+    | FindReferencesArgs String Int Int
+    | GetHoverInformationArgs String Int Int
 
 
 type DiagnosticsSource
@@ -249,7 +373,19 @@ argsDecoder =
 
                     "get-definition-location" ->
                         Decode.map3 GetDefinitionLocationArgs
-                            (Decode.field "uri" Decode.string)
+                            (Decode.field "path" Decode.string)
+                            (Decode.at [ "position", "line" ] Decode.int)
+                            (Decode.at [ "position", "character" ] Decode.int)
+
+                    "find-references" ->
+                        Decode.map3 FindReferencesArgs
+                            (Decode.field "path" Decode.string)
+                            (Decode.at [ "position", "line" ] Decode.int)
+                            (Decode.at [ "position", "character" ] Decode.int)
+
+                    "get-hover-information" ->
+                        Decode.map3 GetHoverInformationArgs
+                            (Decode.field "path" Decode.string)
                             (Decode.at [ "position", "line" ] Decode.int)
                             (Decode.at [ "position", "character" ] Decode.int)
 

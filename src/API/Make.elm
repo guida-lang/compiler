@@ -60,14 +60,14 @@ type ReportType
 run : String -> Flags -> Task Never (Result Exit.Make ( String, List Report.WarningModuleReport ))
 run path flags =
     Stuff.findRoot
-        |> Task.bind
+        |> Task.andThen
             (\maybeRoot ->
                 case maybeRoot of
                     Just root ->
                         runHelp root path flags
 
                     Nothing ->
-                        Task.pure (Err Exit.MakeNoOutline)
+                        Task.succeed (Err Exit.MakeNoOutline)
             )
 
 
@@ -76,9 +76,9 @@ runHelp root path (Flags debug optimize withSourceMaps) =
     BW.withScope
         (\scope ->
             Stuff.withRootLock (Stuff.rootPath root) <|
-                Task.run <|
+                Task.run
                     (getMode debug optimize
-                        |> Task.bind
+                        |> Task.andThen
                             (\desiredMode ->
                                 let
                                     style : Reporting.Style
@@ -86,14 +86,14 @@ runHelp root path (Flags debug optimize withSourceMaps) =
                                         Reporting.json
                                 in
                                 Task.eio Exit.MakeBadDetails (Details.load style scope root)
-                                    |> Task.bind
+                                    |> Task.andThen
                                         (\details ->
                                             buildPaths style root details False False (NE.Nonempty path [])
-                                                |> Task.bind
+                                                |> Task.andThen
                                                     (\((Build.Artifacts warnings _ _ _ _) as artifacts) ->
                                                         case getMains artifacts of
                                                             [] ->
-                                                                -- Task.pure ()
+                                                                -- Task.succeed ()
                                                                 crash "No main!"
 
                                                             [ name ] ->
@@ -105,7 +105,7 @@ runHelp root path (Flags debug optimize withSourceMaps) =
                                                                     buildOutput : Task Exit.Make String
                                                                     buildOutput =
                                                                         toBuilder withSourceMaps Html.leadingLines root details desiredMode artifacts
-                                                                            |> Task.fmap (Html.sandwich target name)
+                                                                            |> Task.map (Html.sandwich target name)
 
                                                                     buildWarnings : Task Exit.Make (List Report.WarningModuleReport)
                                                                     buildWarnings =
@@ -132,16 +132,16 @@ getMode : Bool -> Bool -> Task Exit.Make DesiredMode
 getMode debug optimize =
     case ( debug, optimize ) of
         ( True, True ) ->
-            Task.throw Exit.MakeCannotOptimizeAndDebug
+            Task.fail Exit.MakeCannotOptimizeAndDebug
 
         ( True, False ) ->
-            Task.pure Debug
+            Task.succeed Debug
 
         ( False, False ) ->
-            Task.pure Dev
+            Task.succeed Dev
 
         ( False, True ) ->
-            Task.pure Prod
+            Task.succeed Prod
 
 
 
@@ -160,7 +160,7 @@ buildPaths style root details suppressWarnings denyWarnings paths =
 
 warningToReport : Target -> W.Module -> Task Never Report.WarningModuleReport
 warningToReport target { absolutePath, name, source, warnings } =
-    Task.pure
+    Task.succeed
         { path = absolutePath
         , name = name
         , warnings = List.map (W.toReport target L.empty (Code.toSource source)) warnings
@@ -234,8 +234,8 @@ reportType =
     Parser
         { singular = "report type"
         , plural = "report types"
-        , suggest = \_ -> Task.pure [ "json" ]
-        , examples = \_ -> Task.pure [ "json" ]
+        , suggest = \_ -> Task.succeed [ "json" ]
+        , examples = \_ -> Task.succeed [ "json" ]
         }
 
 
@@ -253,8 +253,8 @@ output =
     Parser
         { singular = "output file"
         , plural = "output files"
-        , suggest = \_ -> Task.pure []
-        , examples = \_ -> Task.pure [ "guida.js", "index.html", "/dev/null" ]
+        , suggest = \_ -> Task.succeed []
+        , examples = \_ -> Task.succeed [ "guida.js", "index.html", "/dev/null" ]
         }
 
 
@@ -278,8 +278,8 @@ docsFile =
     Parser
         { singular = "json file"
         , plural = "json files"
-        , suggest = \_ -> Task.pure []
-        , examples = \_ -> Task.pure [ "docs.json", "documentation.json" ]
+        , suggest = \_ -> Task.succeed []
+        , examples = \_ -> Task.succeed [ "docs.json", "documentation.json" ]
         }
 
 

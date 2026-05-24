@@ -32,7 +32,7 @@ import Utils.Task.Extra as Task
 run : () -> () -> Task Never ()
 run () () =
     Reporting.attempt Exit.bumpToReport <|
-        Task.run (Task.bind bump getEnv)
+        Task.run (Task.andThen bump getEnv)
 
 
 
@@ -46,31 +46,31 @@ type Env
 getEnv : Task Exit.Bump Env
 getEnv =
     Task.io Stuff.findRoot
-        |> Task.bind
+        |> Task.andThen
             (\maybeRoot ->
                 case maybeRoot of
                     Nothing ->
-                        Task.throw Exit.BumpNoOutline
+                        Task.fail Exit.BumpNoOutline
 
                     Just root ->
                         Task.io Stuff.getPackageCache
-                            |> Task.bind
+                            |> Task.andThen
                                 (\cache ->
                                     Task.io Http.getManager
-                                        |> Task.bind
+                                        |> Task.andThen
                                             (\manager ->
                                                 Task.eio Exit.BumpMustHaveLatestRegistry (Registry.latest manager cache)
-                                                    |> Task.bind
+                                                    |> Task.andThen
                                                         (\registry ->
                                                             Task.eio Exit.BumpBadOutline (Outline.read root)
-                                                                |> Task.bind
+                                                                |> Task.andThen
                                                                     (\outline ->
                                                                         case outline of
                                                                             Outline.App appOutline ->
                                                                                 Task.io Website.domain
-                                                                                    |> Task.bind
+                                                                                    |> Task.andThen
                                                                                         (\registryDomain ->
-                                                                                            Task.throw
+                                                                                            Task.fail
                                                                                                 (case appOutline of
                                                                                                     Outline.GuidaAppOutline _ _ _ _ _ _ ->
                                                                                                         Exit.BumpGuidaApplication registryDomain
@@ -81,7 +81,7 @@ getEnv =
                                                                                         )
 
                                                                             Outline.Pkg pkgOutline ->
-                                                                                Task.pure (Env root cache manager registry pkgOutline)
+                                                                                Task.succeed (Env root cache manager registry pkgOutline)
                                                                     )
                                                         )
                                             )
@@ -96,7 +96,7 @@ getEnv =
 bump : Env -> Task Exit.Bump ()
 bump ((Env root _ _ registry outline) as env) =
     Task.io Website.domain
-        |> Task.bind
+        |> Task.andThen
             (\registryDomain ->
                 case outline of
                     Outline.GuidaPkgOutline pkg _ _ vsn _ _ _ _ ->
@@ -111,7 +111,7 @@ bump ((Env root _ _ registry outline) as env) =
                                     suggestVersion env
 
                                 else
-                                    Task.throw <|
+                                    Task.fail <|
                                         Exit.BumpGuidaUnexpectedVersion registryDomain vsn <|
                                             List.map Prelude.head (Utils.listGroupBy (==) (List.sortWith V.compare bumpableVersions))
 
@@ -130,7 +130,7 @@ bump ((Env root _ _ registry outline) as env) =
                                     suggestVersion env
 
                                 else
-                                    Task.throw <|
+                                    Task.fail <|
                                         Exit.BumpElmUnexpectedVersion registryDomain vsn <|
                                             List.map Prelude.head (Utils.listGroupBy (==) (List.sortWith V.compare bumpableVersions))
 
@@ -148,7 +148,7 @@ checkNewPackage root outline =
     case outline of
         Outline.GuidaPkgOutline _ _ _ version _ _ _ _ ->
             IO.putStrLn Exit.newPackageOverview
-                |> Task.bind
+                |> Task.andThen
                     (\_ ->
                         if version == V.one then
                             IO.putStrLn "The version number in guida.json is correct so you are all set!"
@@ -163,7 +163,7 @@ checkNewPackage root outline =
 
         Outline.ElmPkgOutline _ _ _ version _ _ _ _ ->
             IO.putStrLn Exit.newPackageOverview
-                |> Task.bind
+                |> Task.andThen
                     (\_ ->
                         if version == V.one then
                             IO.putStrLn "The version number in elm.json is correct so you are all set!"
@@ -186,10 +186,10 @@ suggestVersion (Env root cache manager _ outline) =
     case outline of
         Outline.GuidaPkgOutline pkg _ _ vsn _ _ _ _ ->
             Task.eio (Exit.BumpCannotFindDocs vsn) (Diff.getDocs cache manager pkg vsn)
-                |> Task.bind
+                |> Task.andThen
                     (\oldDocs ->
                         generateDocs root outline
-                            |> Task.bind
+                            |> Task.andThen
                                 (\newDocs ->
                                     let
                                         changes : Diff.PackageChanges
@@ -234,10 +234,10 @@ suggestVersion (Env root cache manager _ outline) =
 
         Outline.ElmPkgOutline pkg _ _ vsn _ _ _ _ ->
             Task.eio (Exit.BumpCannotFindDocs vsn) (Diff.getDocs cache manager pkg vsn)
-                |> Task.bind
+                |> Task.andThen
                     (\oldDocs ->
                         generateDocs root outline
-                            |> Task.bind
+                            |> Task.andThen
                                 (\newDocs ->
                                     let
                                         changes : Diff.PackageChanges
@@ -287,11 +287,11 @@ generateDocs root outline =
         Outline.GuidaPkgOutline _ _ _ _ exposed _ _ _ ->
             Task.eio Exit.BumpBadDetails
                 (BW.withScope (\scope -> Details.load Reporting.silent scope root))
-                |> Task.bind
+                |> Task.andThen
                     (\details ->
                         case Outline.flattenExposed exposed of
                             [] ->
-                                Task.throw <| Exit.BumpGuidaNoExposed
+                                Task.fail <| Exit.BumpGuidaNoExposed
 
                             e :: es ->
                                 Task.eio Exit.BumpBadBuild <|
@@ -301,11 +301,11 @@ generateDocs root outline =
         Outline.ElmPkgOutline _ _ _ _ exposed _ _ _ ->
             Task.eio Exit.BumpBadDetails
                 (BW.withScope (\scope -> Details.load Reporting.silent scope root))
-                |> Task.bind
+                |> Task.andThen
                     (\details ->
                         case Outline.flattenExposed exposed of
                             [] ->
-                                Task.throw <| Exit.BumpElmNoExposed
+                                Task.fail <| Exit.BumpElmNoExposed
 
                             e :: es ->
                                 Task.eio Exit.BumpBadBuild <|
@@ -322,7 +322,7 @@ changeVersion root outline targetVersion question =
     case outline of
         Outline.GuidaPkgOutline name summary license _ exposed deps testDeps guidaVersion ->
             Reporting.ask question
-                |> Task.bind
+                |> Task.andThen
                     (\approved ->
                         if not approved then
                             IO.putStrLn "Okay, I did not change anything!"
@@ -332,7 +332,7 @@ changeVersion root outline targetVersion question =
                                 (Outline.Pkg
                                     (Outline.GuidaPkgOutline name summary license targetVersion exposed deps testDeps guidaVersion)
                                 )
-                                |> Task.bind
+                                |> Task.andThen
                                     (\_ ->
                                         Help.toStdout
                                             (D.fromChars "Version changed to "
@@ -344,7 +344,7 @@ changeVersion root outline targetVersion question =
 
         Outline.ElmPkgOutline name summary license _ exposed deps testDeps elmVersion ->
             Reporting.ask question
-                |> Task.bind
+                |> Task.andThen
                     (\approved ->
                         if not approved then
                             IO.putStrLn "Okay, I did not change anything!"
@@ -354,7 +354,7 @@ changeVersion root outline targetVersion question =
                                 (Outline.Pkg
                                     (Outline.ElmPkgOutline name summary license targetVersion exposed deps testDeps elmVersion)
                                 )
-                                |> Task.bind
+                                |> Task.andThen
                                     (\_ ->
                                         Help.toStdout
                                             (D.fromChars "Version changed to "

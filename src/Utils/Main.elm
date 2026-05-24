@@ -238,7 +238,7 @@ filterM p =
     List.foldr
         (\x acc ->
             Task.apply acc
-                (Task.fmap
+                (Task.map
                     (\flg ->
                         if flg then
                             (::) x
@@ -249,7 +249,7 @@ filterM p =
                     (p x)
                 )
         )
-        (Task.pure [])
+        (Task.succeed [])
 
 
 find : (k -> comparable) -> k -> Dict comparable k a -> a
@@ -393,9 +393,9 @@ mapM_ f =
     let
         c : a -> Task Never () -> Task Never ()
         c x k =
-            Task.bind (\_ -> k) (f x)
+            Task.andThen (\_ -> k) (f x)
     in
-    List.foldr c (Task.pure ())
+    List.foldr c (Task.succeed ())
 
 
 dictMapM_ : (k -> k -> Order) -> (a -> Task Never b) -> Dict c k a -> Task Never ()
@@ -403,9 +403,9 @@ dictMapM_ keyComparison f =
     let
         c : k -> a -> Task Never () -> Task Never ()
         c _ x k =
-            Task.bind (\_ -> k) (f x)
+            Task.andThen (\_ -> k) (f x)
     in
-    Map.foldl keyComparison c (Task.pure ())
+    Map.foldl keyComparison c (Task.succeed ())
 
 
 maybeMapM : (a -> Maybe b) -> List a -> Maybe (List b)
@@ -443,8 +443,8 @@ mapTraverse toComparable keyComparison f =
 mapTraverseWithKey : (k -> comparable) -> (k -> k -> Order) -> (k -> a -> Task Never b) -> Dict comparable k a -> Task Never (Dict comparable k b)
 mapTraverseWithKey toComparable keyComparison f =
     Map.foldl keyComparison
-        (\k a -> Task.bind (\c -> Task.fmap (\va -> Map.insert toComparable k va c) (f k a)))
-        (Task.pure Map.empty)
+        (\k a -> Task.andThen (\c -> Task.map (\va -> Map.insert toComparable k va c) (f k a)))
+        (Task.succeed Map.empty)
 
 
 mapTraverseResult : (k -> comparable) -> (k -> k -> Order) -> (a -> Result e b) -> Dict comparable k a -> Result e (Dict comparable k b)
@@ -472,25 +472,25 @@ listMaybeTraverse f =
 
 nonEmptyListTraverse : (a -> Task Never b) -> NE.Nonempty a -> Task Never (NE.Nonempty b)
 nonEmptyListTraverse f (NE.Nonempty x list) =
-    List.foldl (\a -> Task.bind (\c -> Task.fmap (\va -> NE.cons va c) (f a)))
-        (Task.fmap NE.singleton (f x))
+    List.foldl (\a -> Task.andThen (\c -> Task.map (\va -> NE.cons va c) (f a)))
+        (Task.map NE.singleton (f x))
         list
 
 
 listTraverse_ : (a -> Task Never b) -> List a -> Task Never ()
 listTraverse_ f =
     listTraverse f
-        >> Task.fmap (\_ -> ())
+        >> Task.map (\_ -> ())
 
 
 maybeTraverseTask : (a -> Task x b) -> Maybe a -> Task x (Maybe b)
 maybeTraverseTask f a =
     case Maybe.map f a of
         Just b ->
-            Task.fmap Just b
+            Task.map Just b
 
         Nothing ->
-            Task.pure Nothing
+            Task.succeed Nothing
 
 
 zipWithM : (a -> b -> Maybe c) -> List a -> List b -> Maybe (List c)
@@ -744,11 +744,11 @@ lockWithFileLock path mode ioFunc =
     case mode of
         LockExclusive ->
             lockFile path
-                |> Task.bind ioFunc
-                |> Task.bind
+                |> Task.andThen ioFunc
+                |> Task.andThen
                     (\a ->
                         unlockFile path
-                            |> Task.fmap (\_ -> a)
+                            |> Task.map (\_ -> a)
                     )
 
 
@@ -861,7 +861,7 @@ dirCanonicalizePath path =
 dirWithCurrentDirectory : FilePath -> Task Never a -> Task Never a
 dirWithCurrentDirectory dir action =
     dirGetCurrentDirectory
-        |> Task.bind
+        |> Task.andThen
             (\currentDir ->
                 bracket_
                     (Impure.task "dirWithCurrentDirectory"
@@ -900,7 +900,7 @@ envLookupEnv name =
 
 envGetProgName : Task Never String
 envGetProgName =
-    Task.pure "guida"
+    Task.succeed "guida"
 
 
 envGetArgs : Task Never (List String)
@@ -986,13 +986,13 @@ type AsyncException
 bracket : Task Never a -> (a -> Task Never b) -> (a -> Task Never c) -> Task Never c
 bracket before after thing =
     before
-        |> Task.bind
+        |> Task.andThen
             (\a ->
                 thing a
-                    |> Task.bind
+                    |> Task.andThen
                         (\r ->
                             after a
-                                |> Task.fmap (\_ -> r)
+                                |> Task.map (\_ -> r)
                         )
             )
 
@@ -1026,10 +1026,10 @@ type MVar a
 newMVar : (a -> BE.Encoder) -> a -> Task Never (MVar a)
 newMVar toEncoder value =
     newEmptyMVar
-        |> Task.bind
+        |> Task.andThen
             (\mvar ->
                 putMVar toEncoder mvar value
-                    |> Task.fmap (\_ -> mvar)
+                    |> Task.map (\_ -> mvar)
             )
 
 
@@ -1044,11 +1044,11 @@ readMVar decoder (MVar ref) =
 modifyMVar : BD.Decoder a -> (a -> BE.Encoder) -> MVar a -> (a -> Task Never ( a, b )) -> Task Never b
 modifyMVar decoder toEncoder m io =
     takeMVar decoder m
-        |> Task.bind io
-        |> Task.bind
+        |> Task.andThen io
+        |> Task.andThen
             (\( a, b ) ->
                 putMVar toEncoder m a
-                    |> Task.fmap (\_ -> b)
+                    |> Task.map (\_ -> b)
             )
 
 
@@ -1095,13 +1095,13 @@ type ChItem a
 newChan : (MVar (ChItem a) -> BE.Encoder) -> Task Never (Chan a)
 newChan toEncoder =
     newEmptyMVar
-        |> Task.bind
+        |> Task.andThen
             (\hole ->
                 newMVar toEncoder hole
-                    |> Task.bind
+                    |> Task.andThen
                         (\readVar ->
                             newMVar toEncoder hole
-                                |> Task.fmap
+                                |> Task.map
                                     (\writeVar ->
                                         Chan readVar writeVar
                                     )
@@ -1114,7 +1114,7 @@ readChan decoder (Chan readVar _) =
     modifyMVar mVarDecoder mVarEncoder readVar <|
         \read_end ->
             readMVar (chItemDecoder decoder) read_end
-                |> Task.fmap
+                |> Task.map
                     (\(ChItem val new_read_end) ->
                         -- Use readMVar here, not takeMVar,
                         -- else dupChan doesn't work
@@ -1125,13 +1125,13 @@ readChan decoder (Chan readVar _) =
 writeChan : (a -> BE.Encoder) -> Chan a -> a -> Task Never ()
 writeChan toEncoder (Chan _ writeVar) val =
     newEmptyMVar
-        |> Task.bind
+        |> Task.andThen
             (\new_hole ->
                 takeMVar mVarDecoder writeVar
-                    |> Task.bind
+                    |> Task.andThen
                         (\old_hole ->
                             putMVar (chItemEncoder toEncoder) old_hole (ChItem val new_hole)
-                                |> Task.bind (\_ -> putMVar mVarEncoder writeVar new_hole)
+                                |> Task.andThen (\_ -> putMVar mVarEncoder writeVar new_hole)
                         )
             )
 

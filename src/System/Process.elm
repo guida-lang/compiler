@@ -14,7 +14,6 @@ import System.Exit as Exit
 import System.IO as IO
 import Task exposing (Task)
 import Utils.Impure as Impure
-import Utils.Task.Extra as Task
 
 
 type CmdSpec
@@ -115,7 +114,7 @@ withCreateProcess createProcess f =
                 (Decode.field "ph" Decode.int)
             )
         )
-        |> Task.bind
+        |> Task.andThen
             (\( stdinHandle, ph ) ->
                 f (Maybe.map IO.Handle stdinHandle) Nothing Nothing (ProcessHandle ph)
             )

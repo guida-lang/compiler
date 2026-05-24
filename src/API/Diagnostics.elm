@@ -1,0 +1,78 @@
+module API.Diagnostics exposing (run)
+
+import Builder.BackgroundWriter as BW
+import Builder.Build as Build
+import Builder.Generate as Generate
+import Builder.Guida.Details as Details
+import Builder.Reporting as Reporting
+import Builder.Reporting.Exit as Exit
+import Builder.Stuff as Stuff
+import Compiler.Data.NonEmptyList as NE
+import Compiler.Generate.Html as Html
+import Compiler.Reporting.Warning as W
+import Task exposing (Task)
+import Utils.Main exposing (FilePath)
+import Utils.Task.Extra as Task
+
+
+
+-- RUN
+
+
+run : String -> Task Never (Result Exit.Make ( Stuff.Root, List W.Module ))
+run path =
+    Stuff.findRoot
+        |> Task.andThen
+            (\maybeRoot ->
+                case maybeRoot of
+                    Just root ->
+                        runHelp root path
+
+                    Nothing ->
+                        Task.succeed (Err Exit.MakeNoOutline)
+            )
+
+
+runHelp : Stuff.Root -> String -> Task Never (Result Exit.Make ( Stuff.Root, List W.Module ))
+runHelp root path =
+    BW.withScope
+        (\scope ->
+            Stuff.withRootLock (Stuff.rootPath root) <|
+                Task.run <|
+                    let
+                        style : Reporting.Style
+                        style =
+                            -- Reporting.json
+                            Reporting.silent
+                    in
+                    Task.eio Exit.MakeBadDetails (Details.load style scope root)
+                        |> Task.andThen
+                            (\details ->
+                                buildPaths style root details (NE.Nonempty path [])
+                                    |> Task.andThen
+                                        (\((Build.Artifacts warnModules _ _ _ _) as artifacts) ->
+                                            toBuilder False Html.leadingLines root details artifacts
+                                                |> Task.map (\_ -> ( root, warnModules ))
+                                        )
+                            )
+        )
+
+
+
+-- BUILD PROJECTS
+
+
+buildPaths : Reporting.Style -> Stuff.Root -> Details.Details -> NE.Nonempty FilePath -> Task Exit.Make Build.Artifacts
+buildPaths style root details paths =
+    Task.eio Exit.MakeCannotBuild <|
+        Build.fromPaths style root details False False paths
+
+
+
+-- TO BUILDER
+
+
+toBuilder : Bool -> Int -> Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Make String
+toBuilder withSourceMaps leadingLines root details artifacts =
+    Task.mapError Exit.MakeBadGenerate <|
+        Generate.prod withSourceMaps leadingLines root details artifacts

@@ -24,28 +24,28 @@ run : Pkg.Name -> Task Never ()
 run pkg =
     Reporting.attempt Exit.uninstallToReport
         (Stuff.findRoot
-            |> Task.bind
+            |> Task.andThen
                 (\maybeRoot ->
                     case maybeRoot of
                         Nothing ->
-                            Task.pure (Err Exit.UninstallNoOutline)
+                            Task.succeed (Err Exit.UninstallNoOutline)
 
                         Just root ->
                             Task.run
                                 (Task.eio Exit.UninstallBadRegistry Solver.initEnv
-                                    |> Task.bind
+                                    |> Task.andThen
                                         (\env ->
                                             Task.eio Exit.UninstallBadOutline (Outline.read root)
-                                                |> Task.bind
+                                                |> Task.andThen
                                                     (\oldOutline ->
                                                         case oldOutline of
                                                             Outline.App outline ->
                                                                 makeAppPlan root env pkg outline
-                                                                    |> Task.bind (\changes -> attemptChanges root env oldOutline changes)
+                                                                    |> Task.andThen (\changes -> attemptChanges root env oldOutline changes)
 
                                                             Outline.Pkg outline ->
                                                                 makePkgPlan pkg outline
-                                                                    |> Task.bind (\changes -> attemptChanges root env oldOutline changes)
+                                                                    |> Task.andThen (\changes -> attemptChanges root env oldOutline changes)
                                                     )
                                         )
                                 )
@@ -78,17 +78,17 @@ attemptChangesHelp root env oldOutline newOutline =
         BW.withScope
             (\scope ->
                 Outline.write root newOutline
-                    |> Task.bind (\_ -> Details.verifyInstall scope root env newOutline)
-                    |> Task.bind
+                    |> Task.andThen (\_ -> Details.verifyInstall scope root env newOutline)
+                    |> Task.andThen
                         (\result ->
                             case result of
                                 Err exit ->
                                     Outline.write root oldOutline
-                                        |> Task.fmap (\_ -> Err exit)
+                                        |> Task.map (\_ -> Err exit)
 
                                 Ok () ->
                                     IO.putStrLn "Success!"
-                                        |> Task.fmap (\_ -> Ok ())
+                                        |> Task.map (\_ -> Ok ())
                         )
             )
 
@@ -104,47 +104,47 @@ makeAppPlan root (Solver.Env cache _ connection registry) pkg outline =
             case Dict.get identity pkg (Dict.union direct testDirect) of
                 Just _ ->
                     Task.io (Solver.removeFromApp cache connection registry pkg outline)
-                        |> Task.bind
+                        |> Task.andThen
                             (\result ->
                                 case result of
                                     Solver.SolverOk (Solver.AppSolution _ _ app) ->
-                                        Task.pure (Changes (Outline.App app))
+                                        Task.succeed (Changes (Outline.App app))
 
                                     Solver.NoSolution ->
-                                        Task.throw (Exit.UninstallGuidaNoOnlineAppSolution pkg)
+                                        Task.fail (Exit.UninstallGuidaNoOnlineAppSolution pkg)
 
                                     Solver.NoOfflineSolution ->
-                                        Task.throw (Exit.UninstallGuidaNoOfflineAppSolution (Stuff.rootPath root) pkg)
+                                        Task.fail (Exit.UninstallGuidaNoOfflineAppSolution (Stuff.rootPath root) pkg)
 
                                     Solver.SolverErr exit ->
-                                        Task.throw (Exit.UninstallHadSolverTrouble exit)
+                                        Task.fail (Exit.UninstallHadSolverTrouble exit)
                             )
 
                 Nothing ->
-                    Task.pure AlreadyNotPresent
+                    Task.succeed AlreadyNotPresent
 
         Outline.ElmAppOutline _ _ direct _ testDirect _ ->
             case Dict.get identity pkg (Dict.union direct testDirect) of
                 Just _ ->
                     Task.io (Solver.removeFromApp cache connection registry pkg outline)
-                        |> Task.bind
+                        |> Task.andThen
                             (\result ->
                                 case result of
                                     Solver.SolverOk (Solver.AppSolution _ _ app) ->
-                                        Task.pure (Changes (Outline.App app))
+                                        Task.succeed (Changes (Outline.App app))
 
                                     Solver.NoSolution ->
-                                        Task.throw (Exit.UninstallElmNoOnlineAppSolution pkg)
+                                        Task.fail (Exit.UninstallElmNoOnlineAppSolution pkg)
 
                                     Solver.NoOfflineSolution ->
-                                        Task.throw (Exit.UninstallElmNoOfflineAppSolution (Stuff.rootPath root) pkg)
+                                        Task.fail (Exit.UninstallElmNoOfflineAppSolution (Stuff.rootPath root) pkg)
 
                                     Solver.SolverErr exit ->
-                                        Task.throw (Exit.UninstallHadSolverTrouble exit)
+                                        Task.fail (Exit.UninstallHadSolverTrouble exit)
                             )
 
                 Nothing ->
-                    Task.pure AlreadyNotPresent
+                    Task.succeed AlreadyNotPresent
 
 
 
@@ -161,7 +161,7 @@ makePkgPlan pkg outline =
                     Dict.union deps test
             in
             if Dict.member identity pkg old then
-                Task.pure <|
+                Task.succeed <|
                     Changes <|
                         Outline.Pkg <|
                             Outline.GuidaPkgOutline name
@@ -174,7 +174,7 @@ makePkgPlan pkg outline =
                                 elmVersion
 
             else
-                Task.pure AlreadyNotPresent
+                Task.succeed AlreadyNotPresent
 
         Outline.ElmPkgOutline name summary license version exposed deps test elmVersion ->
             let
@@ -183,7 +183,7 @@ makePkgPlan pkg outline =
                     Dict.union deps test
             in
             if Dict.member identity pkg old then
-                Task.pure <|
+                Task.succeed <|
                     Changes <|
                         Outline.Pkg <|
                             Outline.ElmPkgOutline name
@@ -196,4 +196,4 @@ makePkgPlan pkg outline =
                                 elmVersion
 
             else
-                Task.pure AlreadyNotPresent
+                Task.succeed AlreadyNotPresent

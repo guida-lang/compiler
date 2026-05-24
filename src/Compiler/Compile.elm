@@ -25,7 +25,6 @@ import Data.Map exposing (Dict)
 import Data.Set as EverySet
 import System.TypeCheck.IO as TypeCheck
 import Task exposing (Task)
-import Utils.Task.Extra as Task
 
 
 
@@ -54,16 +53,16 @@ compile target root pkg ifaces modul =
                         ( optWarnings, optResult ) =
                             optimize target modul annotations canonical
                     in
-                    Task.pure
+                    Task.succeed
                         ( canonicalWarnings ++ optWarnings
                         , Result.map (\objects -> Artifacts canonical annotations objects) optResult
                         )
 
                 Err err ->
-                    Task.pure ( canonicalWarnings, Err err )
+                    Task.succeed ( canonicalWarnings, Err err )
 
         Err err ->
-            Task.pure ( canonicalWarnings, Err err )
+            Task.succeed ( canonicalWarnings, Err err )
 
 
 

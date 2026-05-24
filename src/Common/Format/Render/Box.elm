@@ -1274,8 +1274,7 @@ formatDocComment importInfo blocks =
             case block of
                 GuidaDocs docs ->
                     GuidaDocs <|
-                        (List.map << List.map)
-                            (String.replace "(..)" "")
+                        List.map (List.map (String.replace "(..)" ""))
                             docs
 
                 _ ->
@@ -2600,7 +2599,7 @@ formatBinops importInfo left ops multiline =
             in
             ( ( isLeftPipe
               , po
-              , (Box.line << formatInfixVar) o
+              , Box.line (formatInfixVar o)
               )
             , formatCommentedApostrophe pe <| syntaxParens formatContext <| formatExpression importInfo e
             )
