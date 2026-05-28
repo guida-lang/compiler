@@ -8,10 +8,16 @@ module Compiler.Nitpick.PatternMatches exposing
     , errorEncoder
     )
 
-{- The algorithm used here comes from "Warnings for Pattern Matching"
-   by Luc Maranget. Check it out for more information!
+{-| Pattern match exhaustiveness and redundancy checking for canonical modules.
 
-   http://moscova.inria.fr/~maranget/papers/warn/warn.pdf
+This module simplifies canonical patterns into a reduced representation, then
+uses Luc Maranget's pattern match warning algorithm to detect missing cases and
+redundant branches.
+
+The algorithm used here comes from "Warnings for Pattern Matching"
+by Luc Maranget. Check it out for more information!
+
+<http://moscova.inria.fr/~maranget/papers/warn/warn.pdf>
 
 -}
 
@@ -35,12 +41,17 @@ import Utils.Main as Utils
 -- PATTERN
 
 
+{-| A simplified version of canonical patterns used by the exhaustive and
+redundant pattern checker.
+-}
 type Pattern
     = Anything
     | Literal Literal
     | Ctor Can.Union Name.Name (List Pattern)
 
 
+{-| A literal value used inside simplified patterns.
+-}
 type Literal
     = Chr String
     | Str String
@@ -51,6 +62,9 @@ type Literal
 -- CREATE SIMPLIFIED PATTERNS
 
 
+{-| Convert a canonical pattern into the simplified pattern representation
+used by this checker.
+-}
 simplify : Target -> Can.Pattern -> Pattern
 simplify target (A.At _ pattern) =
     case pattern of
@@ -108,11 +122,15 @@ simplify target (A.At _ pattern) =
                 []
 
 
+{-| Build a simplified list cons pattern for the given head and tail.
+-}
 cons : Target -> Can.Pattern -> Pattern -> Pattern
 cons target hd tl =
     Ctor (list target) consName [ simplify target hd, tl ]
 
 
+{-| Build a simplified empty list pattern.
+-}
 nil : Target -> Pattern
 nil target =
     Ctor (list target) nilName []
@@ -122,6 +140,8 @@ nil target =
 -- BUILT-IN UNIONS
 
 
+{-| The built-in unit constructor pattern.
+-}
 unit : Can.Union
 unit =
     let
@@ -132,6 +152,8 @@ unit =
     Can.Union [] [ ctor ] 1 Can.Normal
 
 
+{-| The built-in pair constructor pattern.
+-}
 pair : Can.Union
 pair =
     let
@@ -142,6 +164,8 @@ pair =
     Can.Union [ "a", "b" ] [ ctor ] 1 Can.Normal
 
 
+{-| The built-in triple constructor pattern.
+-}
 triple : Can.Union
 triple =
     let
@@ -152,6 +176,8 @@ triple =
     Can.Union [ "a", "b", "c" ] [ ctor ] 1 Can.Normal
 
 
+{-| The built-in n-tuple constructor pattern.
+-}
 nTuple : Can.Union
 nTuple =
     let
@@ -162,6 +188,8 @@ nTuple =
     Can.Union [ "a", "b", "cs" ] [ ctor ] 1 Can.Normal
 
 
+{-| The built-in list constructor pattern for the current target.
+-}
 list : Target -> Can.Union
 list target =
     let
@@ -181,31 +209,43 @@ list target =
     Can.Union [ "a" ] [ nilCtor, consCtor ] 2 Can.Normal
 
 
+{-| The built-in unit constructor name.
+-}
 unitName : Name.Name
 unitName =
     "#0"
 
 
+{-| The built-in pair constructor name.
+-}
 pairName : Name.Name
 pairName =
     "#2"
 
 
+{-| The built-in triple constructor name.
+-}
 tripleName : Name.Name
 tripleName =
     "#3"
 
 
+{-| The built-in n-tuple constructor name.
+-}
 nTupleName : Name.Name
 nTupleName =
     "#N"
 
 
+{-| The built-in list cons constructor name.
+-}
 consName : Name.Name
 consName =
     "::"
 
 
+{-| The built-in list nil constructor name.
+-}
 nilName : Name.Name
 nilName =
     "[]"
@@ -215,11 +255,15 @@ nilName =
 -- ERROR
 
 
+{-| A nitpick error produced when pattern matching is incomplete or redundant.
+-}
 type Error
     = Incomplete A.Region Context (List Pattern)
     | Redundant A.Region A.Region Int
 
 
+{-| Describes the location and shape of a pattern match error.
+-}
 type Context
     = BadArg
     | BadDestruct
@@ -230,6 +274,8 @@ type Context
 -- CHECK
 
 
+{-| Check a canonical module's patterns for exhaustiveness and redundancy.
+-}
 check : Target -> Can.Module -> Result (NE.Nonempty Error) ()
 check target (Can.Module _ _ _ decls _ _ _ _) =
     case checkDecls target decls [] identity of
@@ -244,6 +290,8 @@ check target (Can.Module _ _ _ decls _ _ _ _) =
 -- CHECK DECLS
 
 
+{-| Recursively check declarations for pattern match errors.
+-}
 checkDecls : Target -> Can.Decls -> List Error -> (List Error -> List Error) -> List Error
 checkDecls target decls errors cont =
     case decls of
@@ -261,6 +309,8 @@ checkDecls target decls errors cont =
 -- CHECK DEFS
 
 
+{-| Check a single function or value definition for pattern match errors.
+-}
 checkDef : Target -> Can.Def -> List Error -> List Error
 checkDef target def errors =
     case def of
@@ -271,11 +321,15 @@ checkDef target def errors =
             List.foldr (checkTypedArg target) (checkExpr target body errors) args
 
 
+{-| Check a function argument pattern for pattern match errors.
+-}
 checkArg : Target -> Can.Pattern -> List Error -> List Error
 checkArg target ((A.At region _) as pattern) errors =
     checkPatterns target region BadArg [ pattern ] errors
 
 
+{-| Check a typed function argument pattern for pattern match errors.
+-}
 checkTypedArg : Target -> ( Can.Pattern, tipe ) -> List Error -> List Error
 checkTypedArg target ( (A.At region _) as pattern, _ ) errors =
     checkPatterns target region BadArg [ pattern ] errors
@@ -285,6 +339,9 @@ checkTypedArg target ( (A.At region _) as pattern, _ ) errors =
 -- CHECK EXPRESSIONS
 
 
+{-| Check an expression for pattern match errors, including nested branches and
+pattern bindings.
+-}
 checkExpr : Target -> Can.Expr -> List Error -> List Error
 checkExpr target (A.At region expression) errors =
     case expression of
@@ -382,6 +439,8 @@ checkExpr target (A.At region expression) errors =
 -- CHECK FIELD
 
 
+{-| Check a field update expression for pattern match errors.
+-}
 checkField : Target -> Can.FieldUpdate -> List Error -> List Error
 checkField target (Can.FieldUpdate _ expr) errors =
     checkExpr target expr errors
@@ -391,6 +450,8 @@ checkField target (Can.FieldUpdate _ expr) errors =
 -- CHECK IF BRANCH
 
 
+{-| Check a single if branch for pattern match errors.
+-}
 checkIfBranch : Target -> ( Can.Expr, Can.Expr ) -> List Error -> List Error
 checkIfBranch target ( condition, branch ) errs =
     checkExpr target condition (checkExpr target branch errs)
@@ -400,6 +461,9 @@ checkIfBranch target ( condition, branch ) errs =
 -- CHECK CASE EXPRESSION
 
 
+{-| Check all case branches and collect their patterns to detect missing or
+redundant alternatives.
+-}
 checkCases : Target -> A.Region -> List Can.CaseBranch -> List Error -> List Error
 checkCases target region branches errors =
     let
@@ -409,6 +473,9 @@ checkCases target region branches errors =
     checkPatterns target region (BadCase target) patterns newErrors
 
 
+{-| Inspect a case branch and add its pattern to the list of rows for
+exhaustiveness and redundancy analysis.
+-}
 checkCaseBranch : Target -> Can.CaseBranch -> ( List Can.Pattern, List Error ) -> ( List Can.Pattern, List Error )
 checkCaseBranch target (Can.CaseBranch pattern expr) ( patterns, errors ) =
     ( pattern :: patterns
@@ -420,6 +487,8 @@ checkCaseBranch target (Can.CaseBranch pattern expr) ( patterns, errors ) =
 -- CHECK PATTERNS
 
 
+{-| Check a list of patterns for redundancy and exhaustiveness.
+-}
 checkPatterns : Target -> A.Region -> Context -> List Can.Pattern -> List Error -> List Error
 checkPatterns target region context patterns errors =
     case toNonRedundantRows target region patterns of
@@ -437,14 +506,17 @@ checkPatterns target region context patterns errors =
 
 
 -- EXHAUSTIVE PATTERNS
--- INVARIANTS:
---
---   The initial rows "matrix" are all of length 1
---   The initial count of items per row "n" is also 1
---   The resulting rows are examples of missing patterns
---
 
 
+{-| Determine whether the current pattern matrix covers all possible cases.
+
+INVARIANTS:
+
+  - The initial rows "matrix" are all of length 1
+  - The initial count of items per row "n" is also 1
+  - The resulting rows are examples of missing patterns
+
+-}
 isExhaustive : List (List Pattern) -> Int -> List (List Pattern)
 isExhaustive matrix n =
     case matrix of
@@ -492,6 +564,8 @@ isExhaustive matrix n =
                         List.concatMap isAltExhaustive altList
 
 
+{-| Create a missing constructor pattern when not all constructors are covered.
+-}
 isMissing : Can.Union -> Dict String Name.Name a -> Can.Ctor -> Maybe Pattern
 isMissing union ctors (Can.Ctor name _ arity _) =
     if Dict.member identity name ctors then
@@ -501,6 +575,8 @@ isMissing union ctors (Can.Ctor name _ arity _) =
         Just (Ctor union name (List.repeat arity Anything))
 
 
+{-| Recover a constructor row from its specialized arguments.
+-}
 recoverCtor : Can.Union -> Name.Name -> Int -> List Pattern -> List Pattern
 recoverCtor union name arity patterns =
     let
@@ -514,14 +590,21 @@ recoverCtor union name arity patterns =
 -- REDUNDANT PATTERNS
 
 
-{-| INVARIANT: Produces a list of rows where (forall row. length row == 1)
+{-| Convert source patterns into a simplified row matrix while removing
+redundant rows.
+
+INVARIANT: Produces a list of rows where (forall row. length row == 1)
+
 -}
 toNonRedundantRows : Target -> A.Region -> List Can.Pattern -> Result Error (List (List Pattern))
 toNonRedundantRows target region patterns =
     toSimplifiedUsefulRows target region [] patterns
 
 
-{-| INVARIANT: Produces a list of rows where (forall row. length row == 1)
+{-| Build the simplified useful rows matrix and detect redundant cases.
+
+INVARIANT: Produces a list of rows where (forall row. length row == 1)
+
 -}
 toSimplifiedUsefulRows : Target -> A.Region -> List (List Pattern) -> List Can.Pattern -> Result Error (List (List Pattern))
 toSimplifiedUsefulRows target overallRegion checkedRows uncheckedPatterns =
@@ -542,10 +625,8 @@ toSimplifiedUsefulRows target overallRegion checkedRows uncheckedPatterns =
                 Err (Redundant overallRegion region (List.length checkedRows + 1))
 
 
-
--- Check if a new row "vector" is useful given previous rows "matrix"
-
-
+{-| Check if a new row "vector" is useful given previous rows "matrix"
+-}
 isUseful : List (List Pattern) -> List Pattern -> Bool
 isUseful matrix vector =
     case matrix of
@@ -597,10 +678,12 @@ isUseful matrix vector =
                                 patterns
 
 
+{-| Specialize a row by a constructor, expanding its arguments for further
+exhaustiveness checking.
 
--- INVARIANT: (length row == N) ==> (length result == arity + N - 1)
+INVARIANT: (length row == N) ==> (length result == arity + N - 1)
 
-
+-}
 specializeRowByCtor : Name.Name -> Int -> List Pattern -> Maybe (List Pattern)
 specializeRowByCtor ctorName arity row =
     case row of
@@ -622,10 +705,11 @@ specializeRowByCtor ctorName arity row =
             crash "Compiler error! Empty matrices should not get specialized."
 
 
+{-| Specialize a row by a literal, narrowing matching rows for exhaustiveness.
 
--- INVARIANT: (length row == N) ==> (length result == N-1)
+INVARIANT: (length row == N) ==> (length result == N-1)
 
-
+-}
 specializeRowByLiteral : Literal -> List Pattern -> Maybe (List Pattern)
 specializeRowByLiteral literal row =
     case row of
@@ -647,10 +731,12 @@ specializeRowByLiteral literal row =
             crash "Compiler error! Empty matrices should not get specialized."
 
 
+{-| Specialize a row when the first pattern is a wildcard, preserving the
+remaining patterns.
 
--- INVARIANT: (length row == N) ==> (length result == N-1)
+INVARIANT: (length row == N) ==> (length result == N-1)
 
-
+-}
 specializeRowByAnything : List Pattern -> Maybe (List Pattern)
 specializeRowByAnything row =
     case row of
@@ -671,11 +757,16 @@ specializeRowByAnything row =
 -- ALL CONSTRUCTORS ARE PRESENT?
 
 
+{-| Indicates whether a pattern matrix covers all constructors for a type.
+-}
 type Complete
     = Yes (List Can.Ctor)
     | No
 
 
+{-| Determine whether all constructors are present for the current pattern
+matrix.
+-}
 isComplete : List (List Pattern) -> Complete
 isComplete matrix =
     let
@@ -706,11 +797,15 @@ isComplete matrix =
 -- COLLECT CTORS
 
 
+{-| Collect the first constructor from each row of the pattern matrix.
+-}
 collectCtors : List (List Pattern) -> Dict String Name.Name Can.Union
 collectCtors matrix =
     List.foldl (\row acc -> collectCtorsHelp acc row) Dict.empty matrix
 
 
+{-| Helper for collecting constructors from a single row.
+-}
 collectCtorsHelp : Dict String Name.Name Can.Union -> List Pattern -> Dict String Name.Name Can.Union
 collectCtorsHelp ctors row =
     case row of

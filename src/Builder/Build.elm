@@ -62,10 +62,19 @@ import Utils.Main as Utils exposing (FilePath, MVar(..))
 -- ENVIRONMENT
 
 
+{-| Build environment information passed through the build pipeline.
+It includes the terminal reporting key, project root, project type,
+source directories, current build ID, local module metadata, and any
+known foreign package interfaces.
+-}
 type Env
     = Env Reporting.BKey Stuff.Root Parse.ProjectType (List AbsoluteSrcDir) Details.BuildID (Dict String ModuleName.Raw Details.Local) (Dict String ModuleName.Raw Details.Foreign)
 
 
+{-| Create a build environment from project details.
+It resolves source directories from the project configuration and
+turns them into absolute paths for the compiler crawler.
+-}
 makeEnv : Reporting.BKey -> Stuff.Root -> Details.Details -> Task Never Env
 makeEnv key root (Details.Details _ validOutline buildID locals foreigns _) =
     case validOutline of
@@ -82,10 +91,17 @@ makeEnv key root (Details.Details _ validOutline buildID locals foreigns _) =
 -- SOURCE DIRECTORY
 
 
+{-| An absolute source directory path used when crawling project files.
+These directories are normalized against the project root before use.
+-}
 type AbsoluteSrcDir
     = AbsoluteSrcDir FilePath
 
 
+{-| Convert a configured source directory to an absolute path.
+This is used to unify relative and absolute source directory settings
+before the compiler begins scanning files.
+-}
 toAbsoluteSrcDir : FilePath -> Outline.SrcDir -> Task Never AbsoluteSrcDir
 toAbsoluteSrcDir root srcDir =
     Task.map AbsoluteSrcDir
@@ -100,6 +116,10 @@ toAbsoluteSrcDir root srcDir =
         )
 
 
+{-| Interpret a relative source path inside an absolute source directory.
+This is used when resolving module file locations within configured
+source roots.
+-}
 addRelative : AbsoluteSrcDir -> FilePath -> FilePath
 addRelative (AbsoluteSrcDir srcDir) path =
     Utils.fpCombine srcDir path
@@ -132,6 +152,11 @@ forkWithKey toComparable keyComparison encoder func dict =
 -- FROM EXPOSED
 
 
+{-| Build the exposed entry points of a package.
+This is the package-level build path used when no explicit source paths
+are given. It crawls and compiles the exposed modules and optionally
+generates documentation.
+-}
 fromExposed : BD.Decoder docs -> (docs -> BE.Encoder) -> Reporting.Style -> Stuff.Root -> Details.Details -> DocsGoal docs -> NE.Nonempty ModuleName.Raw -> Task Never (Result Exit.BuildProblem docs)
 fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e es) as exposed) =
     Reporting.trackBuild docsDecoder docsEncoder style (\_ -> ( 0, False, False )) <|
@@ -207,19 +232,36 @@ fromExposed docsDecoder docsEncoder style root details docsGoal ((NE.Nonempty e 
 -- FROM PATHS
 
 
+{-| Compiler artifacts produced by a source-path-based build.
+The fields are: warnings produced during compilation, package name,
+dependency interfaces, the selected root modules, and the list of built
+module representations.
+-}
 type Artifacts
     = Artifacts (List W.Module) Pkg.Name Dependencies (NE.Nonempty Root) (List Module)
 
 
+{-| A built module representation.
+Fresh modules are newly compiled from source, while Cached ones may be
+loaded from previously produced artifacts.
+-}
 type Module
     = Fresh ModuleName.Raw I.Interface Opt.LocalGraph
     | Cached ModuleName.Raw Bool (MVar CachedInterface)
 
 
+{-| The set of foreign package dependency interfaces needed by the build.
+Keys are canonical module names and values are dependency interfaces.
+-}
 type alias Dependencies =
     Dict (List String) TypeCheck.Canonical I.DependencyInterface
 
 
+{-| Build specific source paths provided on the CLI.
+This path is used by `guida make <file>...` and produces compiler
+artifacts representing the built modules and their dependencies.
+`suppressWarnings` and `denyWarnings` control how warnings affect the build.
+-}
 fromPaths : Reporting.Style -> Stuff.Root -> Details.Details -> Bool -> Bool -> NE.Nonempty FilePath -> Task Never (Result Exit.BuildProblem Artifacts)
 fromPaths style root details suppressWarnings denyWarnings paths =
     Reporting.trackBuild artifactsDecoder artifactsEncoder style (\(Artifacts warnModules _ _ _ _) -> ( List.length (List.concatMap .warnings warnModules), suppressWarnings, denyWarnings )) <|
@@ -299,6 +341,10 @@ fromPaths style root details suppressWarnings denyWarnings paths =
 -- GET ROOT NAMES
 
 
+{-| Extract the root module names from build artifacts.
+These are the top-level entry points that were requested or discovered
+during the build.
+-}
 getRootNames : Artifacts -> NE.Nonempty ModuleName.Raw
 getRootNames (Artifacts _ _ _ roots _) =
     NE.map getRootName roots
@@ -322,6 +368,10 @@ type alias StatusDict =
     Dict String ModuleName.Raw (MVar Status)
 
 
+{-| Represents the crawl state of a source module.
+It is used while scanning module dependencies to record whether a module
+is cached, changed, invalid, part of a foreign package, or a kernel stub.
+-}
 type Status
     = SCached Details.Local
     | SChanged Details.Local String Src.Module DocsNeed
@@ -331,6 +381,9 @@ type Status
     | SKernel
 
 
+{-| Traverse a module's direct dependencies and ensure their crawl state
+is available in the shared status dictionary.
+-}
 crawlDeps : Target -> Env -> MVar StatusDict -> List ModuleName.Raw -> a -> Task Never a
 crawlDeps target env mvar deps blockedValue =
     let
@@ -363,6 +416,10 @@ crawlDeps target env mvar deps blockedValue =
             )
 
 
+{-| Discover and validate a module by name from configured source directories.
+This function handles Guida/Elm source lookups, ambiguous imports, foreign
+interfaces, and kernel module detection.
+-}
 crawlModule : Target -> Env -> MVar StatusDict -> DocsNeed -> ModuleName.Raw -> Task Never Status
 crawlModule target ((Env _ root projectType srcDirs buildID locals foreigns) as env) mvar ((DocsNeed needsDocs) as docsNeed) name =
     let
@@ -441,6 +498,9 @@ crawlModule target ((Env _ root projectType srcDirs buildID locals foreigns) as 
             )
 
 
+{-| Parse a source file and update crawl state based on its declared
+module name and dependency list.
+-}
 crawlFile : Target -> Env -> MVar StatusDict -> DocsNeed -> ModuleName.Raw -> FilePath -> File.Time -> Details.BuildID -> Task Never Status
 crawlFile target ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed expectedName path time lastChange =
     File.readUtf8 (Utils.fpCombine (Stuff.rootPath root) path)
@@ -473,6 +533,9 @@ crawlFile target ((Env _ root projectType _ buildID _ _) as env) mvar docsNeed e
             )
 
 
+{-| Determine whether a source definition is the `main` entry point.
+This information is used to decide whether a module is executable.
+-}
 isMain : A.Located Src.Value -> Bool
 isMain (A.At _ (Src.Value _ ( _, A.At _ name ) _ _ _)) =
     name == Name.main_
@@ -486,6 +549,11 @@ type alias ResultDict =
     Dict String ModuleName.Raw (MVar BResult)
 
 
+{-| A module check result used during parallel compilation.
+This encapsulates whether a module was newly compiled, reused from a
+previous build, unresolved, blocked by missing dependencies, or a
+foreign/kernel module.
+-}
 type BResult
     = RNew W.Module Details.Local I.Interface Opt.LocalGraph (Maybe Docs.Module)
     | RSame W.Module Details.Local I.Interface Opt.LocalGraph (Maybe Docs.Module)
@@ -497,12 +565,20 @@ type BResult
     | RKernel
 
 
+{-| Lazily cached interface loading state.
+Used when a dependency may or may not need to have its interface read
+from disk depending on whether the dependency was already available.
+-}
 type CachedInterface
     = Unneeded
     | Loaded I.Interface
     | Corrupted
 
 
+{-| Check and compile a module based on its current crawl status.
+This function coordinates dependency checking, incremental reuse,
+syntax/error handling, and compilation for changed modules.
+-}
 checkModule : Env -> Dependencies -> MVar ResultDict -> ModuleName.Raw -> Status -> Task Never BResult
 checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name status =
     case status of
@@ -617,6 +693,10 @@ checkModule ((Env _ root projectType _ _ _ _) as env) foreigns resultsMVar name 
 -- CHECK DEPS
 
 
+{-| Determine whether imported dependencies require recompilation.
+If dependencies are unchanged and cached interfaces are available, the
+current module can reuse existing artifacts.
+-}
 type DepsStatus
     = DepsChange (Dict String ModuleName.Raw I.Interface)
     | DepsSame (List Dep) (List CDep)
@@ -637,6 +717,10 @@ type alias CDep =
     ( ModuleName.Raw, MVar CachedInterface )
 
 
+{-| Walk dependency results to build up interface information.
+This helper accumulates fresh interfaces, same interfaces, cached
+interfaces, and import problems while processing imports.
+-}
 checkDepsHelp : FilePath -> ResultDict -> List ModuleName.Raw -> List Dep -> List Dep -> List CDep -> List ( ModuleName.Raw, Import.Problem ) -> Bool -> Details.BuildID -> Details.BuildID -> Task Never DepsStatus
 checkDepsHelp root results deps new same cached importProblems isBlocked lastDepChange lastCompile =
     case deps of
@@ -699,6 +783,10 @@ checkDepsHelp root results deps new same cached importProblems isBlocked lastDep
 -- TO IMPORT ERROR
 
 
+{-| Convert dependency errors into import diagnostics for reporting.
+This attaches source-region information and known module context to
+unresolved imports.
+-}
 toImportErrors : Env -> ResultDict -> List Src.Import -> NE.Nonempty ( ModuleName.Raw, Import.Problem ) -> NE.Nonempty Import.Error
 toImportErrors (Env _ _ _ _ _ locals foreigns) results imports problems =
     let
@@ -731,6 +819,9 @@ toImportErrors (Env _ _ _ _ _ locals foreigns) results imports problems =
 -- LOAD CACHED INTERFACES
 
 
+{-| Load cached dependency interfaces from disk or reuse already loaded
+interface state.
+-}
 loadInterfaces : FilePath -> List Dep -> List CDep -> Task Never (Maybe (Dict String ModuleName.Raw I.Interface))
 loadInterfaces root same cached =
     Utils.listTraverse (fork maybeDepEncoder << loadInterface root) cached
@@ -748,6 +839,9 @@ loadInterfaces root same cached =
             )
 
 
+{-| Resolve a cached interface entry to a concrete interface value.
+A corrupted cache entry is flagged and causes the dependency load to fail.
+-}
 loadInterface : FilePath -> CDep -> Task Never (Maybe Dep)
 loadInterface root ( name, ciMvar ) =
     Utils.takeMVar cachedInterfaceDecoder ciMvar
@@ -782,6 +876,10 @@ loadInterface root ( name, ciMvar ) =
 -- CHECK PROJECT
 
 
+{-| Validate the module dependency graph before compilation.
+For path-based builds this checks for cycles and ensures external
+package dependencies were loaded successfully.
+-}
 checkMidpoint : Target -> MVar (Maybe Dependencies) -> Dict String ModuleName.Raw Status -> Task Never (Result Exit.BuildProjectProblem Dependencies)
 checkMidpoint target dmvar statuses =
     case checkForCycles statuses of
@@ -802,6 +900,10 @@ checkMidpoint target dmvar statuses =
                 |> Task.map (\_ -> Err (Exit.BP_Cycle target name names))
 
 
+{-| Validate dependency cycles and root uniqueness for explicit source paths.
+This ensures the requested roots do not conflict with each other or with
+inside modules before compilation proceeds.
+-}
 checkMidpointAndRoots : Target -> MVar (Maybe Dependencies) -> Dict String ModuleName.Raw Status -> NE.Nonempty RootStatus -> Task Never (Result Exit.BuildProjectProblem Dependencies)
 checkMidpointAndRoots target dmvar statuses sroots =
     case checkForCycles statuses of
@@ -832,6 +934,9 @@ checkMidpointAndRoots target dmvar statuses sroots =
 -- CHECK FOR CYCLES
 
 
+{-| Detect cyclic dependencies among the currently crawled modules.
+Returns the first strongly-connected cycle found, if any.
+-}
 checkForCycles : Dict String ModuleName.Raw Status -> Maybe (NE.Nonempty ModuleName.Raw)
 checkForCycles modules =
     let
@@ -868,6 +973,9 @@ type alias Node =
     ( ModuleName.Raw, ModuleName.Raw, List ModuleName.Raw )
 
 
+{-| Convert a module status into a graph node for cycle detection.
+Only locally checked module dependencies contribute edges to the graph.
+-}
 addToGraph : ModuleName.Raw -> Status -> List Node -> List Node
 addToGraph name status graph =
     let
@@ -899,6 +1007,10 @@ addToGraph name status graph =
 -- CHECK UNIQUE ROOTS
 
 
+{-| Ensure explicit root modules are unique and do not collide with each other.
+This prevents two different source paths from resolving to the same module
+name or conflicting with an already crawled inside module.
+-}
 checkUniqueRoots : Dict String ModuleName.Raw Status -> NE.Nonempty RootStatus -> Maybe Exit.BuildProjectProblem
 checkUniqueRoots insides sroots =
     let
@@ -919,6 +1031,9 @@ checkUniqueRoots insides sroots =
                     Just problem
 
 
+{-| Extract a module name and file path from an outside root status.
+Inside roots do not contribute to outside root conflict checks.
+-}
 rootStatusToNamePathPair : RootStatus -> Maybe ( ModuleName.Raw, OneOrMore.OneOrMore FilePath )
 rootStatusToNamePathPair sroot =
     case sroot of
@@ -932,6 +1047,10 @@ rootStatusToNamePathPair sroot =
             Nothing
 
 
+{-| Verify that an outside root module name appears in exactly one path.
+If a root appears multiple times, the build must fail with a duplicate
+root error.
+-}
 checkOutside : ModuleName.Raw -> OneOrMore.OneOrMore FilePath -> Result Exit.BuildProjectProblem FilePath
 checkOutside name paths =
     case OneOrMore.destruct NE.Nonempty paths of
@@ -942,6 +1061,9 @@ checkOutside name paths =
             Err (Exit.BP_RootNameDuplicate name p1 p2)
 
 
+{-| Verify that an inside root module does not duplicate an already seen
+module path from the current dependency scan.
+-}
 checkInside : ModuleName.Raw -> FilePath -> Status -> Result Exit.BuildProjectProblem ()
 checkInside name p1 status =
     case status of
@@ -968,6 +1090,10 @@ checkInside name p1 status =
 -- COMPILE MODULE
 
 
+{-| Compile a source module and produce its build result.
+This writes compiled graph files, warning metadata, interface data, and
+returns either a fresh or reused build result.
+-}
 compile : Target -> Env -> DocsNeed -> Details.Local -> String -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Task Never BResult
 compile target (Env key root projectType _ buildID _ _) docsNeed (Details.Local path ((File.Time posix) as time) deps main lastChange _) source ifaces modul =
     let
@@ -1074,6 +1200,10 @@ compile target (Env key root projectType _ buildID _ _) docsNeed (Details.Local 
             )
 
 
+{-| Map a project type to the package name used during compilation.
+Applications use a placeholder package name, while packages retain their
+real package name.
+-}
 projectTypeToPkg : Parse.ProjectType -> Pkg.Name
 projectTypeToPkg projectType =
     case projectType of
@@ -1088,12 +1218,18 @@ projectTypeToPkg projectType =
 -- WRITE DETAILS
 
 
+{-| Persist build metadata after a successful or incremental build.
+This writes updated module details so future builds can detect changes.
+-}
 writeDetails : FilePath -> Details.Details -> Dict String ModuleName.Raw BResult -> Task Never ()
 writeDetails root (Details.Details time outline buildID locals foreigns extras) results =
     File.writeBinary Details.detailsEncoder (Stuff.details root) <|
         Details.Details time outline buildID (Dict.foldr compare addNewLocal locals results) foreigns extras
 
 
+{-| Incorporate newly compiled or reused local metadata into the build details.
+Only fresh or same build results update the details map.
+-}
 addNewLocal : ModuleName.Raw -> BResult -> Dict String ModuleName.Raw Details.Local -> Dict String ModuleName.Raw Details.Local
 addNewLocal name result locals =
     case result of
@@ -1126,6 +1262,9 @@ addNewLocal name result locals =
 -- FINALIZE EXPOSED
 
 
+{-| Finalize a package-exposed build by checking for errors and producing
+either documentation or a successful result payload.
+-}
 finalizeExposed : FilePath -> DocsGoal docs -> NE.Nonempty ModuleName.Raw -> Dict String ModuleName.Raw BResult -> Task Never (Result Exit.BuildProblem docs)
 finalizeExposed root docsGoal exposed results =
     case List.foldr (addImportProblems results) [] (NE.toList exposed) of
@@ -1141,6 +1280,9 @@ finalizeExposed root docsGoal exposed results =
                     Task.succeed <| Err <| Exit.BuildBadModules root e es
 
 
+{-| Collect module errors from build results.
+Only explicit compilation failures contribute to the final error list.
+-}
 addErrors : BResult -> List Error.Module -> List Error.Module
 addErrors result errors =
     case result of
@@ -1169,6 +1311,9 @@ addErrors result errors =
             errors
 
 
+{-| Gather warning modules from build results.
+Fresh, reused, and cached modules may each carry warning metadata.
+-}
 gatherWarnings : BResult -> List W.Module -> List W.Module
 gatherWarnings result warnings =
     case result of
@@ -1200,6 +1345,10 @@ gatherWarnings result warnings =
             warnings
 
 
+{-| Add unresolved import problems for modules that failed to build.
+This filters build results and collects import failures for exposed root
+validation.
+-}
 addImportProblems : Dict String ModuleName.Raw BResult -> ModuleName.Raw -> List ( ModuleName.Raw, Import.Problem ) -> List ( ModuleName.Raw, Import.Problem )
 addImportProblems results name problems =
     case Utils.find identity name results of
@@ -1232,6 +1381,9 @@ addImportProblems results name problems =
 -- DOCS
 
 
+{-| Indicates whether documentation should be ignored, kept in memory, or
+written to a file after the build.
+-}
 type DocsGoal docs
     = KeepDocs (Dict String ModuleName.Raw BResult -> docs)
     | WriteDocs (Dict String ModuleName.Raw BResult -> Task Never docs)
@@ -1243,11 +1395,18 @@ keepDocs =
     KeepDocs (Utils.mapMapMaybe identity compare toDocs)
 
 
+{-| Write documentation JSON to the specified file path.
+This combines all gathered docs from the build results into a single
+encoded JSON artifact.
+-}
 writeDocs : FilePath -> DocsGoal ()
 writeDocs path =
     WriteDocs (E.writeUgly path << Docs.encode << Utils.mapMapMaybe identity compare toDocs)
 
 
+{-| Do not generate or retain any documentation from this build.
+This is the default choice when docs are not requested.
+-}
 ignoreDocs : DocsGoal ()
 ignoreDocs =
     IgnoreDocs ()
@@ -1332,10 +1491,16 @@ toDocs result =
 -- FROM REPL
 
 
+{-| Artifacts produced by building a single REPL input expression.
+This is a lightweight build path used when executing code interactively.
+-}
 type ReplArtifacts
     = ReplArtifacts TypeCheck.Canonical (List Module) L.Localizer (Dict String Name.Name Can.Annotation)
 
 
+{-| Build a single REPL input expression and return the minimal artifacts
+needed to execute it in the interactive REPL.
+-}
 fromRepl : Stuff.Root -> Details.Details -> String -> Task Never (Result Exit.Repl ReplArtifacts)
 fromRepl root details source =
     makeEnv Reporting.ignorer root details
@@ -1414,6 +1579,10 @@ fromRepl root details source =
             )
 
 
+{-| Finalize REPL artifacts after dependency status is known.
+This compiles the input expression when dependencies are available or
+returns an appropriate REPL error when the build is blocked.
+-}
 finalizeReplArtifacts : Env -> String -> Src.Module -> DepsStatus -> ResultDict -> Dict String ModuleName.Raw BResult -> Task Never (Result Exit.Repl ReplArtifacts)
 finalizeReplArtifacts ((Env _ root projectType _ _ _ _) as env) source ((Src.Module _ _ _ _ imports _ _ _ _ _) as modul) depsStatus resultMVars results =
     let
@@ -1492,6 +1661,10 @@ type RootLocation
     | LOutside FilePath
 
 
+{-| Resolve file paths to root module locations for source-path builds.
+This identifies whether each provided path is inside the project tree or an
+outside root file path that must be processed differently.
+-}
 findRoots : Env -> NE.Nonempty FilePath -> Task Never (Result Exit.BuildProjectProblem (NE.Nonempty RootLocation))
 findRoots env paths =
     Utils.nonEmptyListTraverse (fork resultBuildProjectProblemRootInfoEncoder << getRootInfo env) paths
@@ -1505,6 +1678,9 @@ findRoots env paths =
             )
 
 
+{-| Verify that explicit root file paths do not collide on the same relative
+module path inside the project.
+-}
 checkRoots : NE.Nonempty RootInfo -> Result Exit.BuildProjectProblem (NE.Nonempty RootLocation)
 checkRoots infos =
     let
@@ -1531,10 +1707,19 @@ checkRoots infos =
 -- ROOT INFO
 
 
+{-| Information about a source path that was resolved into a root module.
+The first `FilePath` is the absolute path, the second is the original
+requested path, and the `RootLocation` records whether the path is
+inside the current project or outside it.
+-}
 type RootInfo
     = RootInfo FilePath FilePath RootLocation
 
 
+{-| Resolve a user-provided file path into a root module location.
+This verifies that the path exists and delegates to path normalization
+and source-root resolution.
+-}
 getRootInfo : Env -> FilePath -> Task Never (Result Exit.BuildProjectProblem RootInfo)
 getRootInfo env path =
     File.exists path
@@ -1548,6 +1733,11 @@ getRootInfo env path =
             )
 
 
+{-| Resolve a normalized absolute path against configured source roots.
+If the file is inside one of the project's source directories, it is
+recorded as an `LInside` root. Otherwise it is treated as an external
+`LOutside` root path.
+-}
 getRootInfoHelp : Env -> FilePath -> FilePath -> Task Never (Result Exit.BuildProjectProblem RootInfo)
 getRootInfoHelp (Env _ root _ srcDirs _ _ _) path absolutePath =
     let
@@ -1612,11 +1802,17 @@ getRootInfoHelp (Env _ root _ srcDirs _ _ _) path absolutePath =
         Task.succeed <| Err <| Exit.BP_WithBadExtension (Stuff.rootToTarget root) path
 
 
+{-| Check whether a candidate module name exists in a given source dir.
+This only verifies that the corresponding file actually exists.
+-}
 isInsideSrcDirByName : List String -> String -> AbsoluteSrcDir -> Task Never Bool
 isInsideSrcDirByName names extension srcDir =
     File.exists (addRelative srcDir (Utils.fpJoinPath names ++ extension))
 
 
+{-| Determine whether an absolute path lies under a configured source root.
+If so, the remaining path segments are returned for module-name extraction.
+-}
 isInsideSrcDirByPath : List String -> AbsoluteSrcDir -> Maybe ( FilePath, Result (List String) (List String) )
 isInsideSrcDirByPath segments (AbsoluteSrcDir srcDir) =
     dropPrefix (Utils.fpSplitDirectories srcDir) segments
@@ -1630,6 +1826,10 @@ isInsideSrcDirByPath segments (AbsoluteSrcDir srcDir) =
             )
 
 
+{-| Check whether a single module path segment is a valid exposed name.
+Valid segments begin with an uppercase letter and contain only letters,
+numbers, or underscores.
+-}
 isGoodName : String -> Bool
 isGoodName name =
     case String.toList name of
@@ -1644,6 +1844,10 @@ isGoodName name =
 -- INVARIANT: Dir.canonicalizePath has been run on both inputs
 
 
+{-| Drop a source-root prefix from a path, if the path begins with it.
+This is used to convert an absolute path into a relative module path
+within the source root.
+-}
 dropPrefix : List FilePath -> List FilePath -> Maybe (List FilePath)
 dropPrefix roots paths =
     case roots of
@@ -1667,12 +1871,20 @@ dropPrefix roots paths =
 -- CRAWL ROOTS
 
 
+{-| Status for a requested root file during path-based builds.
+Inside roots are modules already known in the project, while outside
+roots are explicit files which must be parsed and checked individually.
+-}
 type RootStatus
     = SInside ModuleName.Raw
     | SOutsideOk Details.Local String Src.Module
     | SOutsideErr Error.Module
 
 
+{-| Crawl a root module location discovered from a source path.
+Inside roots are registered into the shared crawl state, while outside
+roots are parsed directly from their explicit file path.
+-}
 crawlRoot : Env -> MVar StatusDict -> RootLocation -> Task Never RootStatus
 crawlRoot ((Env _ root projectType _ buildID _ _) as env) mvar rootLocation =
     case rootLocation of
@@ -1731,6 +1943,10 @@ type RootResult
     | ROutsideBlocked
 
 
+{-| Validate a root location after crawling.
+This decides whether the root is already known in the project or
+whether an outside root must be compiled from its explicit source.
+-}
 checkRoot : Env -> ResultDict -> RootStatus -> Task Never RootResult
 checkRoot ((Env _ root _ _ _ _ _) as env) results rootStatus =
     case rootStatus of
@@ -1771,6 +1987,11 @@ checkRoot ((Env _ root _ _ _ _ _) as env) results rootStatus =
                     )
 
 
+{-| Compile a root module that was discovered from an explicit outside
+source file. The resulting `RootResult` contains the module's interface
+and compiled object graph so it can be treated as if it were part of the
+project build.
+-}
 compileOutside : Env -> Details.Local -> String -> Dict String ModuleName.Raw I.Interface -> Src.Module -> Task Never RootResult
 compileOutside (Env key root projectType _ _ _ _) (Details.Local path time _ _ _ _) source ifaces modul =
     let
@@ -1800,11 +2021,20 @@ compileOutside (Env key root projectType _ _ _ _) (Details.Local path time _ _ _
 -- TO ARTIFACTS
 
 
+{-| A root module name discovered during a build.
+`Inside` denotes a module already in the project sources. `Outside`
+represents an explicit root module from outside the normal project tree
+with its compiled interface and local object graph.
+-}
 type Root
     = Inside ModuleName.Raw
     | Outside ModuleName.Raw I.Interface Opt.LocalGraph
 
 
+{-| Convert build results into final artifacts.
+This function collects warnings, validates root modules, and constructs
+the `Artifacts` value used by the rest of the compiler pipeline.
+-}
 toArtifacts : Env -> Dependencies -> Dict String ModuleName.Raw BResult -> NE.Nonempty RootResult -> Result Exit.BuildProblem Artifacts
 toArtifacts (Env _ root projectType _ _ _ _) foreigns results rootResults =
     case gatherProblemsOrMains results rootResults of
@@ -1822,6 +2052,11 @@ toArtifacts (Env _ root projectType _ _ _ _) foreigns results rootResults =
                     Dict.foldr compare addInside (NE.foldr addOutside [] rootResults) results
 
 
+{-| Turn root build results into a `Root` list or return the first
+module error encountered.
+This also accumulates any non-root module failures discovered by the
+regular build result dictionary.
+-}
 gatherProblemsOrMains : Dict String ModuleName.Raw BResult -> NE.Nonempty RootResult -> Result (NE.Nonempty Error.Module) (NE.Nonempty Root)
 gatherProblemsOrMains results (NE.Nonempty rootResult rootResults) =
     let
@@ -1867,6 +2102,10 @@ gatherProblemsOrMains results (NE.Nonempty rootResult rootResults) =
             Err (NE.Nonempty e es)
 
 
+{-| Convert an in-project module build result into a final `Module`.
+Only successful or cached module results are retained; errors here should
+have already been reported during the normal build pass.
+-}
 addInside : ModuleName.Raw -> BResult -> List Module -> List Module
 addInside name result modules =
     case result of
@@ -1895,11 +2134,20 @@ addInside name result modules =
             modules
 
 
+{-| A fallback message for an internal consistency failure.
+If an inside root module reaches this code path, it means the error
+should have been handled earlier in the build process.
+-}
 badInside : ModuleName.Raw -> String
 badInside name =
     "Error from `" ++ name ++ "` should have been reported already."
 
 
+{-| Add an outside root module to the final module list.
+Only successfully compiled outside roots are included; failures and
+blocked roots are ignored because they are reported through the build
+error path.
+-}
 addOutside : RootResult -> List Module -> List Module
 addOutside root modules =
     case root of

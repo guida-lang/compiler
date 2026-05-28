@@ -37,6 +37,13 @@ import Utils.Task.Extra as Task
 -- GENERATORS
 
 
+{-| Generate a debug JavaScript bundle string.
+
+This loads compiled objects and type information, prepares source maps if
+requested, and invokes the JavaScript generator in `Dev` mode with full
+type annotations included to aid debugging.
+
+-}
 debug : Bool -> Int -> Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
 debug withSourceMaps leadingLines root details (Build.Artifacts _ pkg ifaces roots modules) =
     loadObjects (Stuff.rootPath root) details modules
@@ -71,6 +78,12 @@ debug withSourceMaps leadingLines root details (Build.Artifacts _ pkg ifaces roo
             )
 
 
+{-| Generate a development JavaScript bundle string.
+
+Like `debug` but omits detailed type annotations; suitable for iterative
+development where readable output is preferred over maximum optimization.
+
+-}
 dev : Bool -> Int -> Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
 dev withSourceMaps leadingLines root details (Build.Artifacts _ pkg _ roots modules) =
     Task.andThen finalizeObjects (loadObjects (Stuff.rootPath root) details modules)
@@ -97,6 +110,13 @@ dev withSourceMaps leadingLines root details (Build.Artifacts _ pkg _ roots modu
             )
 
 
+{-| Generate a production JavaScript bundle string.
+
+Performs additional checks (e.g. ensuring no debug-only constructs remain),
+prepares source maps as requested, and invokes the JS generator in `Prod`
+mode which applies optimizations and name shortening.
+
+-}
 prod : Bool -> Int -> Stuff.Root -> Details.Details -> Build.Artifacts -> Task Exit.Generate String
 prod withSourceMaps leadingLines root details (Build.Artifacts _ pkg _ roots modules) =
     Task.andThen finalizeObjects (loadObjects (Stuff.rootPath root) details modules)
@@ -127,6 +147,13 @@ prod withSourceMaps leadingLines root details (Build.Artifacts _ pkg _ roots mod
             )
 
 
+{-| Prepare source maps for all modules in a project root.
+
+When `withSourceMaps` is `True` this reads every source file listed by the
+outline and converts them into `JS.SourceMaps`. When `False` it returns
+`JS.NoSourceMaps`.
+
+-}
 prepareSourceMaps : Bool -> Stuff.Root -> Task Exit.Generate JS.SourceMaps
 prepareSourceMaps withSourceMaps root =
     if withSourceMaps then
@@ -139,6 +166,13 @@ prepareSourceMaps withSourceMaps root =
         Task.succeed JS.NoSourceMaps
 
 
+{-| Generate code for the REPL.
+
+This builds a small JS snippet suitable for running a single `name` in the
+REPL environment, using in-memory module artifacts and optional ANSI
+coloring.
+
+-}
 repl : Target -> FilePath -> Details.Details -> Bool -> Build.ReplArtifacts -> N.Name -> Task Exit.Generate String
 repl target root details ansi (Build.ReplArtifacts home modules localizer annotations) name =
     Task.andThen finalizeObjects (loadObjects root details modules)
@@ -157,6 +191,10 @@ repl target root details ansi (Build.ReplArtifacts home modules localizer annota
 -- CHECK FOR DEBUG
 
 
+{-| Fail production builds if any modules still include debug-only
+constructs that cannot be optimized away. This enforces that `prod`
+builds are free of debug helpers.
+-}
 checkForDebugUses : Objects -> Task Exit.Generate ()
 checkForDebugUses (Objects _ locals) =
     case Dict.keys compare (Dict.filter (\_ -> Nitpick.hasDebugUses) locals) of
@@ -171,11 +209,24 @@ checkForDebugUses (Objects _ locals) =
 -- GATHER MAINS
 
 
+{-| Collect `main` entries for each root module.
+
+Returns a dictionary mapping comparable canonical module names to their
+corresponding `Opt.Main` values, used by the JS generator to stitch
+entry points into the final bundle.
+
+-}
 gatherMains : Pkg.Name -> Objects -> NE.Nonempty Build.Root -> Dict (List String) TypeCheck.Canonical Opt.Main
 gatherMains pkg (Objects _ locals) roots =
     Dict.fromList ModuleName.toComparableCanonical (List.filterMap (lookupMain pkg locals) (NE.toList roots))
 
 
+{-| Lookup the `main` graph for a specific root module.
+
+Handles both in-project (`Inside`) and explicit external (`Outside`)
+roots by consulting the loaded local graphs.
+
+-}
 lookupMain : Pkg.Name -> Dict String ModuleName.Raw Opt.LocalGraph -> Build.Root -> Maybe ( TypeCheck.Canonical, Opt.Main )
 lookupMain pkg locals root =
     let
@@ -195,10 +246,23 @@ lookupMain pkg locals root =
 -- LOADING OBJECTS
 
 
+{-| Intermediate structure holding MVars for loaded global and local graphs.
+
+Used while asynchronous object loads are in-flight so finalization can
+wait for all pieces to be available.
+
+-}
 type LoadingObjects
     = LoadingObjects (MVar (Maybe Opt.GlobalGraph)) (Dict String ModuleName.Raw (MVar (Maybe Opt.LocalGraph)))
 
 
+{-| Begin loading object graphs for all modules referenced by the build.
+
+Returns a `LoadingObjects` value containing MVars that will eventually
+hold the loaded global/local graphs; some MVars may already contain
+values for newly compiled modules.
+
+-}
 loadObjects : FilePath -> Details.Details -> List Build.Module -> Task Exit.Generate LoadingObjects
 loadObjects root details modules =
     Task.io
@@ -214,6 +278,13 @@ loadObjects root details modules =
         )
 
 
+{-| Load a single module's object graph into an MVar.
+
+For `Fresh` modules the MVar is pre-filled. For `Cached` modules the
+MVar is created empty and populated asynchronously by reading the
+artifact from disk.
+
+-}
 loadObject : FilePath -> Build.Module -> Task Never ( ModuleName.Raw, MVar (Maybe Opt.LocalGraph) )
 loadObject root modul =
     case modul of
@@ -234,10 +305,21 @@ loadObject root modul =
 -- FINALIZE OBJECTS
 
 
+{-| Fully resolved in-memory objects used by the generator.
+
+Contains the global graph and a dictionary of per-module local graphs.
+
+-}
 type Objects
     = Objects Opt.GlobalGraph (Dict String ModuleName.Raw Opt.LocalGraph)
 
 
+{-| Wait for all object-loading MVars and assemble the final `Objects`.
+
+Fails with `Exit.GenerateCannotLoadArtifacts` if any required artifact is
+missing or corrupted.
+
+-}
 finalizeObjects : LoadingObjects -> Task Exit.Generate Objects
 finalizeObjects (LoadingObjects mvar mvars) =
     Task.eio identity
@@ -258,6 +340,9 @@ finalizeObjects (LoadingObjects mvar mvars) =
         )
 
 
+{-| Merge the global graph with local graphs to produce a complete
+`Opt.GlobalGraph` for code generation.
+-}
 objectsToGlobalGraph : Objects -> Opt.GlobalGraph
 objectsToGlobalGraph (Objects globals locals) =
     Dict.foldr compare (\_ -> Opt.addLocalGraph) globals locals
@@ -267,6 +352,13 @@ objectsToGlobalGraph (Objects globals locals) =
 -- LOAD TYPES
 
 
+{-| Load type information for the modules, merging with foreign
+dependency interfaces when available.
+
+Returns the combined `Extract.Types` needed for generation and
+debugging assistance.
+
+-}
 loadTypes : FilePath -> Dict (List String) TypeCheck.Canonical I.DependencyInterface -> List Build.Module -> Task Exit.Generate Extract.Types
 loadTypes root ifaces modules =
     Task.eio identity
@@ -292,6 +384,10 @@ loadTypes root ifaces modules =
         )
 
 
+{-| Helper to load types for a single module, returning an MVar that
+will eventually contain the `Extract.Types` or `Nothing` when
+unavailable.
+-}
 loadTypesHelp : FilePath -> Build.Module -> Task Never (MVar (Maybe Extract.Types))
 loadTypesHelp root modul =
     case modul of

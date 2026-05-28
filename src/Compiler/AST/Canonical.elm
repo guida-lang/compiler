@@ -39,23 +39,24 @@ module Compiler.AST.Canonical exposing
     , unionEncoder
     )
 
-{- Creating a canonical AST means finding the home module for all variables.
-   So if you have L.map, you need to figure out that it is from the elm/core
-   package in the List module.
+{-| Creating a canonical AST means finding the home module for all variables.
+So if you have L.map, you need to figure out that it is from the elm/core
+package in the List module.
 
-   In later phases (e.g. type inference, exhaustiveness checking, optimization)
-   you need to look up additional info from these modules. What is the type?
-   What are the alternative type constructors? These lookups can be quite costly,
-   especially in type inference. To reduce costs the canonicalization phase
-   caches info needed in later phases. This means we no longer build large
-   dictionaries of metadata with O(log(n)) lookups in those phases. Instead
-   there is an O(1) read of an existing field! I have tried to mark all
-   cached data with comments like:
+In later phases (e.g. type inference, exhaustiveness checking, optimization)
+you need to look up additional info from these modules. What is the type?
+What are the alternative type constructors? These lookups can be quite costly,
+especially in type inference. To reduce costs the canonicalization phase
+caches info needed in later phases. This means we no longer build large
+dictionaries of metadata with O(log(n)) lookups in those phases. Instead
+there is an O(1) read of an existing field! I have tried to mark all
+cached data with comments like:
 
-   -- CACHE for exhaustiveness
-   -- CACHE for inference
+-- CACHE for exhaustiveness
+-- CACHE for inference
 
-   So it is clear why the data is kept around.
+So it is clear why the data is kept around.
+
 -}
 
 import Compiler.AST.Source as Src
@@ -75,6 +76,8 @@ import Utils.Bytes.Encode as BE
 -- EXPRESSIONS
 
 
+{-| A canonical expression with source location metadata.
+-}
 type alias Expr =
     A.Located Expr_
 
@@ -83,6 +86,9 @@ type alias Expr =
 -- CACHE Annotations for type inference
 
 
+{-| The canonical expression AST, with resolved variable homes and caching
+for later phases such as type inference and optimization.
+-}
 type Expr_
     = VarLocal Name
     | VarTopLevel IO.Canonical Name
@@ -114,10 +120,16 @@ type Expr_
     | Shader Shader.Source Shader.Types
 
 
+{-| A single branch in a `case` expression, with the pattern and result
+expression.
+-}
 type CaseBranch
     = CaseBranch Pattern Expr
 
 
+{-| A field update in a record `update` expression, preserving the source
+region for the update target.
+-}
 type FieldUpdate
     = FieldUpdate A.Region Expr
 
@@ -126,11 +138,15 @@ type FieldUpdate
 -- DEFS
 
 
+{-| A top-level or local definition in a canonical module.
+-}
 type Def
     = Def (A.Located Name) (List Pattern) Expr
     | TypedDef (A.Located Name) FreeVars (List ( Pattern, Type )) Expr Type
 
 
+{-| A sequence of declarations within a canonical module.
+-}
 type Decls
     = Declare Def Decls
     | DeclareRec Def (List Def) Decls
@@ -141,10 +157,14 @@ type Decls
 -- PATTERNS
 
 
+{-| A source-located canonical pattern.
+-}
 type alias Pattern =
     A.Located Pattern_
 
 
+{-| A canonical pattern without source location, used by the compiler core.
+-}
 type Pattern_
     = PAnything
     | PVar Name
@@ -172,6 +192,8 @@ type Pattern_
         }
 
 
+{-| A constructor argument pattern, with its source order and inferred type.
+-}
 type PatternCtorArg
     = PatternCtorArg
         -- CACHE for destructors/errors
@@ -185,14 +207,21 @@ type PatternCtorArg
 -- TYPES
 
 
+{-| A polymorphic annotation for canonical definitions and expressions.
+-}
 type Annotation
     = Forall FreeVars Type
 
 
+{-| A mapping of free type variable names used by a canonical definition.
+-}
 type alias FreeVars =
     Dict String Name ()
 
 
+{-| A fully canonical type, with resolved type constructor references and
+optional record extension names.
+-}
 type Type
     = TLambda Type Type
     | TVar Name
@@ -203,11 +232,16 @@ type Type
     | TAlias IO.Canonical Name (List ( Name, Type )) AliasType
 
 
+{-| Whether a canonical alias type has been fully expanded or still contains a
+hole that must be filled during type resolution.
+-}
 type AliasType
     = Holey Type
     | Filled Type
 
 
+{-| A canonical record field type carrying the original field order.
+-}
 type FieldType
     = FieldType Int Type
 
@@ -218,6 +252,9 @@ type FieldType
 -- the orders will all be zeros.
 
 
+{-| Convert canonical record fields into an ordered list, dropping the stored
+field indices.
+-}
 fieldsToList : Dict String Name FieldType -> List ( Name, Type )
 fieldsToList fields =
     let
@@ -238,18 +275,28 @@ fieldsToList fields =
 -- MODULES
 
 
+{-| A canonical module with resolved exports, docs, declarations, and
+cached union/alias/binop metadata.
+-}
 type Module
     = Module IO.Canonical Exports Src.Docs Decls (Dict String Name Union) (Dict String Name Alias) (Dict String Name Binop) Effects
 
 
+{-| A canonical type alias definition.
+-}
 type Alias
     = Alias (List Name) Type
 
 
+{-| A canonical binary operator declaration.
+-}
 type Binop
     = Binop_ Binop.Associativity Binop.Precedence Name
 
 
+{-| A canonical union type definition, with cached data for exhaustiveness and
+optimization checks.
+-}
 type Union
     = Union
         (List Name)
@@ -260,12 +307,16 @@ type Union
         CtorOpts
 
 
+{-| Options that describe a constructor's runtime representation.
+-}
 type CtorOpts
     = Normal
     | Enum
     | Unbox
 
 
+{-| A constructor definition, with cached field count for code generation.
+-}
 type Ctor
     = Ctor Name Index.ZeroBased Int (List Type) -- CACHE length args
 
@@ -274,11 +325,15 @@ type Ctor
 -- EXPORTS
 
 
+{-| The set of exports exposed by a canonical module.
+-}
 type Exports
     = ExportEverything A.Region
     | Export (Dict String Name (A.Located Export))
 
 
+{-| A single exposed symbol in a canonical module.
+-}
 type Export
     = ExportValue
     | ExportBinop
@@ -288,12 +343,16 @@ type Export
     | ExportPort
 
 
+{-| The effect annotations for a canonical module.
+-}
 type Effects
     = NoEffects
     | Ports (Dict String Name Port)
     | Manager A.Region A.Region A.Region Manager
 
 
+{-| A port in a canonical module, storing payload and function types.
+-}
 type Port
     = Incoming
         { freeVars : FreeVars
@@ -307,6 +366,8 @@ type Port
         }
 
 
+{-| The runtime manager type for commands and subscriptions.
+-}
 type Manager
     = Cmd Name
     | Sub Name

@@ -7,6 +7,14 @@ module Compiler.Canonicalize.Expression exposing
     , verifyBindings
     )
 
+{-| Canonicalize source expressions into the compiler's canonical AST form.
+
+This module resolves variables, constructors, and operators, tracks local
+usage for warnings, and converts source expressions into a normalized,
+compiler-ready representation.
+
+-}
+
 import Basics.Extra exposing (flip)
 import Builder.Stuff as Stuff
 import Compiler.AST.Canonical as Can
@@ -38,14 +46,22 @@ import Utils.Main as Utils
 -- RESULTS
 
 
+{-| The result type used throughout canonicalization, accumulating warnings
+and canonicalization errors.
+-}
 type alias EResult i w a =
     R.RResult i w Error.Error a
 
 
+{-| The set of locally bound variables with usage counts.
+-}
 type alias FreeLocals =
     Dict String Name.Name Uses
 
 
+{-| Usage counts for a local variable, distinguishing direct references
+from delayed references in nested lambdas or patterns.
+-}
 type Uses
     = Uses
         { direct : Int
@@ -57,6 +73,10 @@ type Uses
 -- CANONICALIZE
 
 
+{-| Canonicalize a source expression into the canonical AST form,
+resolving variables, constructors, operators, and gathering local usage
+information.
+-}
 canonicalize : Target -> Stuff.Root -> SyntaxVersion -> Env.Env -> Src.Expr -> EResult FreeLocals (List W.Warning) Can.Expr
 canonicalize target root syntaxVersion env (A.At region expression) =
     R.fmap (A.At region) <|
@@ -179,6 +199,9 @@ canonicalize target root syntaxVersion env (A.At region expression) =
                 R.fmap A.toValue (canonicalize target root syntaxVersion env expr)
 
 
+{-| Canonicalize additional tuple elements for a tuple expression,
+respecting the target-specific tuple size rules.
+-}
 canonicalizeTupleExtras : Target -> Stuff.Root -> SyntaxVersion -> A.Region -> Env.Env -> List Src.Expr -> EResult FreeLocals (List W.Warning) (List Can.Expr)
 canonicalizeTupleExtras target root syntaxVersion region env extras =
     case extras of
@@ -201,6 +224,9 @@ canonicalizeTupleExtras target root syntaxVersion region env extras =
 -- CANONICALIZE IF BRANCH
 
 
+{-| Canonicalize a single `if` branch, producing the condition and branch
+expressions in canonical form.
+-}
 canonicalizeIfBranch : Target -> Stuff.Root -> SyntaxVersion -> Env.Env -> ( Src.Expr, Src.Expr ) -> EResult FreeLocals (List W.Warning) ( Can.Expr, Can.Expr )
 canonicalizeIfBranch target root syntaxVersion env ( condition, branch ) =
     R.fmap Tuple.pair (canonicalize target root syntaxVersion env condition)
@@ -211,6 +237,9 @@ canonicalizeIfBranch target root syntaxVersion env ( condition, branch ) =
 -- CANONICALIZE CASE BRANCH
 
 
+{-| Canonicalize a case branch by resolving its pattern and body expression,
+while tracking any introduced local bindings.
+-}
 canonicalizeCaseBranch : Target -> Stuff.Root -> SyntaxVersion -> Env.Env -> ( Src.Pattern, Src.Expr ) -> EResult FreeLocals (List W.Warning) Can.CaseBranch
 canonicalizeCaseBranch target root syntaxVersion env ( pattern, expr ) =
     directUsage
@@ -235,6 +264,9 @@ canonicalizeCaseBranch target root syntaxVersion env ( pattern, expr ) =
 -- CANONICALIZE BINOPS
 
 
+{-| Canonicalize an expression containing parsed binary operator groups,
+respecting operator precedence and associativity.
+-}
 canonicalizeBinops : Target -> Stuff.Root -> SyntaxVersion -> A.Region -> Env.Env -> List ( Src.Expr, A.Located Name.Name ) -> Src.Expr -> EResult FreeLocals (List W.Warning) Can.Expr
 canonicalizeBinops target root syntaxVersion overallRegion env ops final =
     let
@@ -249,12 +281,17 @@ canonicalizeBinops target root syntaxVersion overallRegion env ops final =
         )
 
 
+{-| Internal state for stepping through binary operator resolution.
+-}
 type Step
     = Done Can.Expr
     | More (List ( Can.Expr, Env.Binop )) Can.Expr
     | Error Env.Binop Env.Binop
 
 
+{-| Process the current binop stepping state and produce the final canonical
+expression or an operator precedence error.
+-}
 runBinopStepper : A.Region -> Step -> EResult FreeLocals w Can.Expr
 runBinopStepper overallRegion step =
     case step of
@@ -272,6 +309,9 @@ runBinopStepper overallRegion step =
             R.throw (Error.Binop overallRegion op1 op2)
 
 
+{-| Advance the binop parsing state using the next operator and the current
+expression tree, taking precedence and associativity into account.
+-}
 toBinopStep : (Can.Expr -> Can.Expr) -> Env.Binop -> List ( Can.Expr, Env.Binop ) -> Can.Expr -> Step
 toBinopStep makeBinop ((Env.Binop _ _ _ _ rootAssociativity rootPrecedence) as rootOp) middle final =
     case middle of
@@ -305,11 +345,17 @@ toBinopStep makeBinop ((Env.Binop _ _ _ _ rootAssociativity rootPrecedence) as r
                         Error rootOp op
 
 
+{-| Build a canonical binary operator expression node from the resolved
+operator information.
+-}
 toBinop : Env.Binop -> Can.Expr -> Can.Expr -> Can.Expr
 toBinop (Env.Binop op home name annotation _ _) left right =
     A.merge left right (Can.Binop op home name annotation left right)
 
 
+{-| Canonicalize a `let` expression, including nested definitions and the
+binding environment for the body.
+-}
 canonicalizeLet : Target -> Stuff.Root -> SyntaxVersion -> A.Region -> Env.Env -> List (A.Located Src.Def) -> Src.Expr -> EResult FreeLocals (List W.Warning) Can.Expr
 canonicalizeLet target root syntaxVersion letRegion env defs body =
     directUsage <|
@@ -336,6 +382,8 @@ canonicalizeLet target root syntaxVersion letRegion env defs body =
         )
 
 
+{-| Collect bindings from a source definition for duplicate detection.
+-}
 addBindings : A.Located Src.Def -> Dups.Tracker A.Region -> Dups.Tracker A.Region
 addBindings (A.At _ def) bindings =
     case def of
@@ -346,6 +394,9 @@ addBindings (A.At _ def) bindings =
             addBindingsHelp bindings pattern
 
 
+{-| Walk a source pattern and accumulate bound variable names for duplicate
+pattern checking.
+-}
 addBindingsHelp : Dups.Tracker A.Region -> Src.Pattern -> Dups.Tracker A.Region
 addBindingsHelp bindings (A.At region pattern) =
     case pattern of
@@ -398,16 +449,23 @@ addBindingsHelp bindings (A.At region pattern) =
             addBindingsHelp bindings parensPattern
 
 
+{-| A graph node used to detect recursive `let` bindings during canonicalization.
+-}
 type alias Node =
     ( Binding, Name.Name, List Name.Name )
 
 
+{-| A binding node in the let recursion graph.
+-}
 type Binding
     = Define Can.Def
     | Edge (A.Located Name.Name)
     | Destruct Can.Pattern Can.Expr
 
 
+{-| Convert source definitions into graph nodes for cycle detection and
+canonical definition creation.
+-}
 addDefNodes : Target -> Stuff.Root -> SyntaxVersion -> Env.Env -> List Node -> A.Located Src.Def -> EResult FreeLocals (List W.Warning) (List Node)
 addDefNodes target root syntaxVersion env nodes (A.At _ def) =
     case def of
@@ -502,6 +560,9 @@ addDefNodes target root syntaxVersion env nodes (A.At _ def) =
                     )
 
 
+{-| Record local variable usage for a `let` definition or destructuring
+binding, delaying uses for function arguments when appropriate.
+-}
 logLetLocals : List arg -> FreeLocals -> value -> EResult FreeLocals w value
 logLetLocals args letLocals value =
     R.RResult
@@ -524,11 +585,15 @@ logLetLocals args letLocals value =
         )
 
 
+{-| Add an edge from one binding target to another in the local recursion graph.
+-}
 addEdge : List Name.Name -> A.Located Name.Name -> List Node -> List Node
 addEdge edges ((A.At _ name) as aname) nodes =
     ( Edge aname, name, edges ) :: nodes
 
 
+{-| Extract the defined names from a source pattern in declaration order.
+-}
 getPatternNames : List (A.Located Name.Name) -> Src.Pattern -> List (A.Located Name.Name)
 getPatternNames names (A.At region pattern) =
     case pattern of
@@ -575,6 +640,9 @@ getPatternNames names (A.At region pattern) =
             getPatternNames names parensPattern
 
 
+{-| Match source function arguments against an annotated type, producing
+canonical patterns and argument types for typed function definitions.
+-}
 gatherTypedArgs :
     Target
     -> SyntaxVersion
@@ -608,6 +676,9 @@ gatherTypedArgs target syntaxVersion env name srcArgs tipe index revTypedArgs =
                     R.throw (Error.AnnotationTooShort (A.mergeRegions start end) name index (List.length srcArgs))
 
 
+{-| Detect recursive cycles among let bindings and wrap the resulting
+canonical expression appropriately.
+-}
 detectCycles : Target -> A.Region -> List (Graph.SCC Binding) -> Can.Expr -> EResult i w Can.Expr
 detectCycles target letRegion sccs body =
     case sccs of
@@ -638,6 +709,9 @@ detectCycles target letRegion sccs body =
                         )
 
 
+{-| Validate a set of bindings in a cycle and ensure recursive definitions
+are only allowed for functions.
+-}
 checkCycle : Target -> List Binding -> List Can.Def -> EResult i w (List Can.Def)
 checkCycle target bindings defs =
     case bindings of
@@ -669,6 +743,8 @@ checkCycle target bindings defs =
                     checkCycle target otherBindings defs
 
 
+{-| Produce the list of names involved in a recursive binding cycle.
+-}
 toNames : List Binding -> List Can.Def -> List Name.Name
 toNames bindings revDefs =
     case bindings of
@@ -687,6 +763,8 @@ toNames bindings revDefs =
                     toNames otherBindings revDefs
 
 
+{-| Extract the defined name from a canonical definition.
+-}
 getDefName : Can.Def -> Name.Name
 getDefName def =
     case def of
@@ -697,6 +775,8 @@ getDefName def =
             name
 
 
+{-| Record a direct usage of a variable and return the provided value.
+-}
 logVar : Name.Name -> a -> EResult FreeLocals w a
 logVar name value =
     R.RResult <|
@@ -704,6 +784,8 @@ logVar name value =
             R.ROk (Utils.mapInsertWith identity combineUses name oneDirectUse freeLocals) warnings value
 
 
+{-| The usage count for a single direct variable reference.
+-}
 oneDirectUse : Uses
 oneDirectUse =
     Uses
@@ -712,6 +794,8 @@ oneDirectUse =
         }
 
 
+{-| Combine two usage counters for local variables.
+-}
 combineUses : Uses -> Uses -> Uses
 combineUses (Uses ab) (Uses xy) =
     Uses
@@ -720,6 +804,9 @@ combineUses (Uses ab) (Uses xy) =
         }
 
 
+{-| Convert direct uses into delayed uses for values captured by a
+nested lambda or deferred binding.
+-}
 delayUse : Uses -> Uses
 delayUse (Uses { direct, delayed }) =
     Uses
@@ -732,6 +819,9 @@ delayUse (Uses { direct, delayed }) =
 -- MANAGING BINDINGS
 
 
+{-| Verify that bindings are used correctly and emit unused variable
+warnings when necessary.
+-}
 verifyBindings :
     W.Context
     -> Pattern.Bindings
@@ -765,11 +855,16 @@ verifyBindings context bindings (R.RResult k) =
         )
 
 
+{-| Attach an unused variable warning for a binding that was never read.
+-}
 addUnusedWarning : W.Context -> Name.Name -> A.Region -> List W.Warning -> List W.Warning
 addUnusedWarning context name region warnings =
     W.UnusedVariable region context name :: warnings
 
 
+{-| Convert a computation that produces temporary free locals into one that
+accumulates those locals directly.
+-}
 directUsage : EResult () w ( expr, FreeLocals ) -> EResult FreeLocals w expr
 directUsage (R.RResult k) =
     R.RResult
@@ -783,6 +878,9 @@ directUsage (R.RResult k) =
         )
 
 
+{-| Convert a computation that produces temporary free locals into one that
+records those locals as delayed uses.
+-}
 delayedUsage : EResult () w ( expr, FreeLocals ) -> EResult FreeLocals w expr
 delayedUsage (R.RResult k) =
     R.RResult
@@ -805,6 +903,9 @@ delayedUsage (R.RResult k) =
 -- FIND VARIABLE
 
 
+{-| Resolve an unqualified variable name in the current environment,
+returning a canonical variable expression.
+-}
 findVar : Target -> A.Region -> Env.Env -> Name -> EResult FreeLocals w Can.Expr_
 findVar target region env name =
     case Dict.get identity name env.vars of
@@ -832,6 +933,9 @@ findVar target region env name =
             R.throw (Error.NotFoundVar target region Nothing name (toPossibleNames env.vars env.q_vars))
 
 
+{-| Resolve a qualified variable name, handling foreign modules, kernel
+imports, and ambiguous references.
+-}
 findVarQual : Target -> A.Region -> Env.Env -> Name -> Name -> EResult FreeLocals w Can.Expr_
 findVarQual target region env prefix name =
     case Dict.get identity prefix env.q_vars of
@@ -863,6 +967,8 @@ findVarQual target region env prefix name =
                 R.throw (Error.NotFoundVar target region (Just prefix) name (toPossibleNames env.vars env.q_vars))
 
 
+{-| Build the set of possible names to report when a variable lookup fails.
+-}
 toPossibleNames : Dict String Name Env.Var -> Env.Qualified Can.Annotation -> Error.PossibleNames
 toPossibleNames exposed qualified =
     Error.PossibleNames (Utils.keysSet identity compare exposed) (Dict.map (\_ -> Utils.keysSet identity compare) qualified)
@@ -872,6 +978,9 @@ toPossibleNames exposed qualified =
 -- FIND CTOR
 
 
+{-| Convert a resolved constructor reference into a canonical constructor
+variable expression.
+-}
 toVarCtor : Name -> Env.Ctor -> Can.Expr_
 toVarCtor name ctor =
     case ctor of

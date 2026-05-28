@@ -28,6 +28,14 @@ module Compiler.Type.Type exposing
     , vec4
     )
 
+{-| Core compiler type definitions and utility constructors.
+
+This module defines the type language used by the solver, helper constructors
+for built-in and primitive types, and conversion helpers used by reporting and
+annotation generation.
+
+-}
+
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Utils.Type as Type
 import Compiler.Data.Name as Name exposing (Name)
@@ -48,6 +56,12 @@ import Utils.Crash exposing (crash)
 -- CONSTRAINTS
 
 
+{-| Type constraints produced by the compiler during inference.
+
+Constraints are solved by the type solver and include equality checks,
+pattern expectations, and let-generalization scopes.
+
+-}
 type Constraint
     = CTrue
     | CSaveTheEnvironment
@@ -59,6 +73,12 @@ type Constraint
     | CLet (List Variable) (List Variable) (Dict String Name (A.Located Type)) Constraint Constraint
 
 
+{-| Introduce a scope with existentially quantified flexible variables.
+
+This helper is used to model local inference scopes where the variables in
+`flexVars` are treated as existentials for `constraint`.
+
+-}
 exists : List Variable -> Constraint -> Constraint
 exists flexVars constraint =
     CLet [] flexVars Dict.empty constraint CTrue
@@ -68,6 +88,12 @@ exists flexVars constraint =
 -- TYPE PRIMITIVES
 
 
+{-| The internal type representation used by the compiler's solver.
+
+This type includes placeholders, aliases, flexible and rigid variables, type
+applications, function arrows, records, tuples, and unit.
+
+-}
 type Type
     = PlaceHolder Name
     | AliasN IO.Canonical Name (List ( Name, Type )) Type
@@ -84,6 +110,12 @@ type Type
 -- DESCRIPTORS
 
 
+{-| Create a new descriptor for a solver variable.
+
+Descriptors track the variable's current content, rank, occurrence mark,
+and copy state during inference.
+
+-}
 makeDescriptor : Content -> Descriptor
 makeDescriptor content =
     Descriptor content noRank noMark Nothing
@@ -93,11 +125,15 @@ makeDescriptor content =
 -- RANKS
 
 
+{-| A rank reserved for un-generalized solver variables.
+-}
 noRank : Int
 noRank =
     0
 
 
+{-| The outermost solver rank used for top-level inference.
+-}
 outermostRank : Int
 outermostRank =
     1
@@ -107,21 +143,30 @@ outermostRank =
 -- MARKS
 
 
+{-| The default mark for newly created variables before any occurrence or
+name-tracking pass.
+-}
 noMark : Mark
 noMark =
     Mark 2
 
 
+{-| A mark used when a variable is currently being visited during occurs-checks.
+-}
 occursMark : Mark
 occursMark =
     Mark 1
 
 
+{-| A mark used when collecting all named solver variables from a term.
+-}
 getVarNamesMark : Mark
 getVarNamesMark =
     Mark 0
 
 
+{-| Allocate a fresh mark for tracking solver variable visits.
+-}
 nextMark : Mark -> Mark
 nextMark (Mark mark) =
     Mark (mark + 1)
@@ -131,6 +176,8 @@ nextMark (Mark mark) =
 -- FUNCTION TYPES
 
 
+{-| Construct a function arrow type from an argument to a result.
+-}
 funType : Type -> Type -> Type
 funType =
     FunN
@@ -140,31 +187,43 @@ funType =
 -- PRIMITIVE TYPES
 
 
+{-| Primitive built-in type constructors for the current compilation target.
+-}
 int : Target -> Type
 int target =
     AppN (ModuleName.basics target) "Int" []
 
 
+{-| The built-in `Float` type for the current compilation target.
+-}
 float : Target -> Type
 float target =
     AppN (ModuleName.basics target) "Float" []
 
 
+{-| The built-in `Char` type for the current compilation target.
+-}
 char : Target -> Type
 char target =
     AppN (ModuleName.char target) "Char" []
 
 
+{-| The built-in `String` type for the current compilation target.
+-}
 string : Target -> Type
 string target =
     AppN (ModuleName.string target) "String" []
 
 
+{-| The built-in `Bool` type for the current compilation target.
+-}
 bool : Target -> Type
 bool target =
     AppN (ModuleName.basics target) "Bool" []
 
 
+{-| The built-in `Never` type for the current compilation target.
+-}
 never : Target -> Type
 never target =
     AppN (ModuleName.basics target) "Never" []
@@ -174,26 +233,36 @@ never target =
 -- WEBGL TYPES
 
 
+{-| 2D vector type for WebGL targets.
+-}
 vec2 : Target -> Type
 vec2 target =
     AppN (ModuleName.vector2 target) "Vec2" []
 
 
+{-| 3D vector type for WebGL targets.
+-}
 vec3 : Target -> Type
 vec3 target =
     AppN (ModuleName.vector3 target) "Vec3" []
 
 
+{-| 4D vector type for WebGL targets.
+-}
 vec4 : Target -> Type
 vec4 target =
     AppN (ModuleName.vector4 target) "Vec4" []
 
 
+{-| WebGL matrix type for WebGL targets.
+-}
 mat4 : Target -> Type
 mat4 target =
     AppN (ModuleName.matrix4 target) "Mat4" []
 
 
+{-| GPU texture type for WebGL targets.
+-}
 texture : Target -> Type
 texture target =
     AppN (ModuleName.texture target) "Texture" []
@@ -203,16 +272,26 @@ texture target =
 -- MAKE FLEX VARIABLES
 
 
+{-| Create a fresh unnamed flexible type variable.
+-}
 mkFlexVar : IO Variable
 mkFlexVar =
     UF.fresh flexVarDescriptor
 
 
+{-| Descriptor for a fresh unnamed flexible solver variable.
+
+This descriptor is used when creating a newly allocated flexible type variable
+in the solver.
+
+-}
 flexVarDescriptor : Descriptor
 flexVarDescriptor =
     makeDescriptor unnamedFlexVar
 
 
+{-| A fresh unnamed flexible variable content placeholder.
+-}
 unnamedFlexVar : Content
 unnamedFlexVar =
     FlexVar Nothing
@@ -222,16 +301,33 @@ unnamedFlexVar =
 -- MAKE FLEX NUMBERS
 
 
+{-| Create a fresh unnamed flexible numeric variable.
+
+This variable can later unify with any numeric supertype during inference.
+
+-}
 mkFlexNumber : IO Variable
 mkFlexNumber =
     UF.fresh flexNumberDescriptor
 
 
+{-| Descriptor for a fresh unnamed flexible numeric solver variable.
+
+This descriptor is used when allocating a fresh flexible variable that can
+later unify with any numeric supertype.
+
+-}
 flexNumberDescriptor : Descriptor
 flexNumberDescriptor =
     makeDescriptor (unnamedFlexSuper Number)
 
 
+{-| An unnamed flexible supertype placeholder.
+
+This is used to create placeholder content for fresh solver variables that
+represent a specific supertype category such as `Number` or `Comparable`.
+
+-}
 unnamedFlexSuper : SuperType -> Content
 unnamedFlexSuper super =
     FlexSuper super Nothing
@@ -241,6 +337,12 @@ unnamedFlexSuper super =
 -- MAKE NAMED VARIABLES
 
 
+{-| Create a flexible solver variable with a user-provided name.
+
+Named flexible variables are useful for preserving user-facing names in the
+solver state while still allowing unification.
+
+-}
 nameToFlex : Name -> IO Variable
 nameToFlex name =
     UF.fresh <|
@@ -248,6 +350,12 @@ nameToFlex name =
             Maybe.unwrap FlexVar FlexSuper (toSuper name) (Just name)
 
 
+{-| Create a rigid solver variable with a user-provided name.
+
+Rigid variables do not unify with other types during inference and are used to
+represent fixed type names.
+
+-}
 nameToRigid : Name -> IO Variable
 nameToRigid name =
     UF.fresh <|
@@ -255,6 +363,12 @@ nameToRigid name =
             Maybe.unwrap RigidVar RigidSuper (toSuper name) name
 
 
+{-| Determine whether a user-provided name belongs to a known supertype.
+
+Returns the corresponding `SuperType` for known numeric, comparable, appendable,
+or compappend names.
+
+-}
 toSuper : Name -> Maybe SuperType
 toSuper name =
     if Name.isNumberType name then
@@ -277,6 +391,12 @@ toSuper name =
 -- TO TYPE ANNOTATION
 
 
+{-| Convert a solver variable into a canonical type annotation.
+
+This is used by reporting and by the compiler front-end when producing
+`Can.Annotation` values from solver state.
+
+-}
 toAnnotation : Variable -> IO Can.Annotation
 toAnnotation variable =
     getVarNames variable Dict.empty
@@ -290,6 +410,12 @@ toAnnotation variable =
             )
 
 
+{-| Convert a solver variable into a canonical AST type.
+
+This is used when producing `Can.Type` values for annotation generation and
+reporting.
+
+-}
 variableToCanType : Variable -> State.StateT NameState Can.Type
 variableToCanType variable =
     liftIO (UF.get variable)
@@ -357,6 +483,8 @@ variableToCanType variable =
             )
 
 
+{-| Convert a flat solver type term into a canonical AST type.
+-}
 termToCanType : FlatType -> StateT NameState Can.Type
 termToCanType term =
     case term of
@@ -402,6 +530,12 @@ termToCanType term =
                 |> State.apply (State.traverseList variableToCanType cs)
 
 
+{-| Convert a record field solver variable into a canonical field type.
+
+This wraps a field variable in `Can.FieldType` so record construction and
+annotation generation can use a consistent field representation.
+
+-}
 fieldToCanType : Variable -> StateT NameState Can.FieldType
 fieldToCanType variable =
     variableToCanType variable
@@ -412,6 +546,11 @@ fieldToCanType variable =
 -- TO ERROR TYPE
 
 
+{-| Convert a solver variable into an error-reporting type.
+
+This is used to render type errors from the solver's internal state.
+
+-}
 toErrorType : Variable -> IO ET.Type
 toErrorType variable =
     getVarNames variable Dict.empty
@@ -421,6 +560,12 @@ toErrorType variable =
             )
 
 
+{-| Convert a solver variable into an error-reporting type.
+
+This wraps variable-to-type conversion with occurs checks and name tracking
+for error messages.
+
+-}
 variableToErrorType : Variable -> StateT NameState ET.Type
 variableToErrorType variable =
     liftIO (UF.get variable)
@@ -443,6 +588,8 @@ variableToErrorType variable =
             )
 
 
+{-| Convert solver variable content into an error-reporting type.
+-}
 contentToErrorType : Variable -> Content -> StateT NameState ET.Type
 contentToErrorType variable content =
     case content of
@@ -506,6 +653,8 @@ contentToErrorType variable content =
             State.pure ET.Error
 
 
+{-| Convert a solver supertype into the error-reporting supertype representation.
+-}
 superToSuper : SuperType -> ET.Super
 superToSuper super =
     case super of
@@ -522,6 +671,8 @@ superToSuper super =
             ET.CompAppend
 
 
+{-| Convert a flat solver type term into an error-reporting type.
+-}
 termToErrorType : FlatType -> StateT NameState ET.Type
 termToErrorType term =
     case term of
@@ -585,10 +736,18 @@ termToErrorType term =
 -- MANAGE FRESH VARIABLE NAMES
 
 
+{-| Internal state used while generating fresh names for type variables.
+
+The `NameState` contains the set of taken names and counters for normal,
+comparable, appendable, and compappend name generation.
+
+-}
 type NameState
     = NameState (Dict String Name ()) Int Int Int Int Int
 
 
+{-| Create initial name state from already taken solver variable names.
+-}
 makeNameState : Dict String Name Variable -> NameState
 makeNameState taken =
     NameState (Dict.map (\_ _ -> ()) taken) 0 0 0 0 0
@@ -598,6 +757,8 @@ makeNameState taken =
 -- FRESH VAR NAMES
 
 
+{-| Generate a fresh normal type variable name within the current name state.
+-}
 getFreshVarName : StateT NameState Name
 getFreshVarName =
     State.gets (\(NameState _ normals _ _ _ _) -> normals)
@@ -619,6 +780,8 @@ getFreshVarName =
             )
 
 
+{-| Helper for `getFreshVarName` that avoids duplicate type variable names.
+-}
 getFreshVarNameHelp : Int -> Dict String Name () -> ( Name, Int, Dict String Name () )
 getFreshVarNameHelp index taken =
     let
@@ -637,6 +800,8 @@ getFreshVarNameHelp index taken =
 -- FRESH SUPER NAMES
 
 
+{-| Generate a fresh named supertype variable within the current name state.
+-}
 getFreshSuperName : SuperType -> StateT NameState Name
 getFreshSuperName super =
     case super of
@@ -669,6 +834,12 @@ getFreshSuperName super =
                 )
 
 
+{-| Generic helper for generating fresh supertype variable names.
+
+The caller provides the supertype prefix and state accessors for the
+appropriate name counter.
+
+-}
 getFreshSuper : Name -> (NameState -> Int) -> (Int -> NameState -> NameState) -> StateT NameState Name
 getFreshSuper prefix getter setter =
     State.gets getter
@@ -690,6 +861,8 @@ getFreshSuper prefix getter setter =
             )
 
 
+{-| Helper for `getFreshSuper` that avoids duplicate supertype names.
+-}
 getFreshSuperHelp : Name -> Int -> Dict String Name () -> ( Name, Int, Dict String Name () )
 getFreshSuperHelp prefix index taken =
     let
@@ -708,6 +881,12 @@ getFreshSuperHelp prefix index taken =
 -- GET ALL VARIABLE NAMES
 
 
+{-| Collect all named solver variables reachable from a variable.
+
+This traverses the variable's structure and records any named flexible,
+rigid, or alias variables for later annotation generation.
+
+-}
 getVarNames : Variable -> Dict String Name Variable -> IO (Dict String Name Variable)
 getVarNames var takenNames =
     UF.get var
@@ -777,6 +956,12 @@ getVarNames var takenNames =
 -- REGISTER NAME / RENAME DUPLICATES
 
 
+{-| Register a named solver variable and rename duplicates if necessary.
+
+If the given name is already taken by another variable, this function will
+try an indexed variant until it finds a unique name.
+
+-}
 addName : Int -> Name -> Variable -> (Name -> Content) -> Dict String Name Variable -> IO (Dict String Name Variable)
 addName index givenName var makeContent takenNames =
     let

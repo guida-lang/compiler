@@ -59,6 +59,13 @@ module Compiler.AST.Source exposing
     , typeEncoder
     )
 
+{-| Source AST definitions for the Guida compiler.
+
+This module describes the parsed syntax tree for source programs, including
+expressions, patterns, types, modules, imports, and formatting comments.
+
+-}
+
 import Compiler.AST.Utils.Binop as Binop
 import Compiler.AST.Utils.Shader as Shader
 import Compiler.Data.Name as Name exposing (Name)
@@ -73,10 +80,14 @@ import Utils.Bytes.Encode as BE
 -- FORMAT
 
 
+{-| Force a value or record field to render as multiline.
+-}
 type ForceMultiline
     = ForceMultiline Bool
 
 
+{-| A comment attached to the source AST for spacing and formatting.
+-}
 type FComment
     = BlockComment (List String)
     | LineComment String
@@ -85,38 +96,55 @@ type FComment
     | CommentTrickBlock String
 
 
+{-| A list of formatting comments.
+-}
 type alias FComments =
     List FComment
 
 
+{-| A value with comments before it.
+-}
 type alias C1 a =
     ( FComments, a )
 
 
+{-| Apply a function over the value stored in a `C1` wrapper.
+-}
 c1map : (a -> b) -> C1 a -> C1 b
 c1map f ( comments, a ) =
     ( comments, f a )
 
 
+{-| Extract the wrapped value from a `C1` wrapper.
+-}
 c1Value : C1 a -> a
 c1Value ( _, a ) =
     a
 
 
+{-| A value with comments before and after it.
+-}
 type alias C2 a =
     ( ( FComments, FComments ), a )
 
 
+{-| Apply a function over the value stored in a `C2` wrapper.
+-}
 c2map : (a -> b) -> C2 a -> C2 b
 c2map f ( ( before, after ), a ) =
     ( ( before, after ), f a )
 
 
+{-| Extract the wrapped value from a `C2` wrapper.
+-}
 c2Value : C2 a -> a
 c2Value ( _, a ) =
     a
 
 
+{-| Sequence a list of `C2` values into a single `C2` list, preserving all
+comments in order.
+-}
 sequenceAC2 : List (C2 a) -> C2 (List a)
 sequenceAC2 =
     List.foldr
@@ -126,43 +154,63 @@ sequenceAC2 =
         ( ( [], [] ), [] )
 
 
+{-| A value wrapped with comments before, after, and trailing end-of-line
+comments.
+-}
 type alias C3 a =
     ( ( FComments, FComments, FComments ), a )
 
 
+{-| A value that may be followed by an end-of-line comment.
+-}
 type alias C0Eol a =
     ( Maybe String, a )
 
 
+{-| Apply a function over the value stored in a `C0Eol` wrapper.
+-}
 c0EolMap : (a -> b) -> C0Eol a -> C0Eol b
 c0EolMap f ( eol, a ) =
     ( eol, f a )
 
 
+{-| Extract the wrapped value from a `C0Eol` wrapper.
+-}
 c0EolValue : C0Eol a -> a
 c0EolValue ( _, a ) =
     a
 
 
+{-| A value with comments before and an optional end-of-line comment.
+-}
 type alias C1Eol a =
     ( FComments, Maybe String, a )
 
 
+{-| A value with comments before, after, and an optional end-of-line comment.
+-}
 type alias C2Eol a =
     ( ( FComments, FComments, Maybe String ), a )
 
 
+{-| Apply a function over the value stored in a `C2Eol` wrapper.
+-}
 c2EolMap : (a -> b) -> C2Eol a -> C2Eol b
 c2EolMap f ( ( before, after, eol ), a ) =
     ( ( before, after, eol ), f a )
 
 
+{-| Extract the wrapped value from a `C2Eol` wrapper.
+-}
 c2EolValue : C2Eol a -> a
 c2EolValue ( _, a ) =
     a
 
 
-{-| This represents a list of things that have a clear start delimiter but no
+{-| A list of items where the final boundary is implied by indentation or
+end-of-line, rather than by a closing delimiter.
+
+This represents a list of things that have a clear start delimiter but no
 clear end delimiter.
 There must be at least one item.
 Comments can appear before the last item, or around any other item.
@@ -179,6 +227,8 @@ type OpenCommentedList a
     = OpenCommentedList (List (C2Eol a)) (C1Eol a)
 
 
+{-| Map a function over every element in an `OpenCommentedList`.
+-}
 openCommentedListMap : (a -> b) -> OpenCommentedList a -> OpenCommentedList b
 openCommentedListMap f (OpenCommentedList rest ( preLst, eolLst, lst )) =
     OpenCommentedList
@@ -186,14 +236,17 @@ openCommentedListMap f (OpenCommentedList rest ( preLst, eolLst, lst )) =
         ( preLst, eolLst, f lst )
 
 
+{-| Convert an open commented list into a regular list with an explicit final
+comment entry.
+-}
 toCommentedList : OpenCommentedList Type -> List (C2Eol Type)
 toCommentedList (OpenCommentedList rest ( cLast, eolLast, last )) =
     rest ++ [ ( ( cLast, [], eolLast ), last ) ]
 
 
-{-| Represents a delimiter-separated pair.
+{-| Represents a delimiter-separated key/value pair with formatting data.
 
-Comments can appear after the key or before the value.
+Comments may appear after the key or before the value.
 
 For example:
 
@@ -205,6 +258,8 @@ type Pair key value
     = Pair (C1 key) (C1 value) ForceMultiline
 
 
+{-| Map functions over the key and value inside a `Pair`.
+-}
 mapPair : (a1 -> a2) -> (b1 -> b2) -> Pair a1 b1 -> Pair a2 b2
 mapPair fa fb (Pair k v fm) =
     Pair (c1map fa k) (c1map fb v) fm
@@ -214,10 +269,15 @@ mapPair fa fb (Pair k v fm) =
 -- EXPRESSIONS
 
 
+{-| A located source expression node.
+-}
 type alias Expr =
     A.Located Expr_
 
 
+{-| Source expression forms, including literals, variables, control flow, and
+record updates.
+-}
 type Expr_
     = Chr String
     | Str String Bool
@@ -244,6 +304,8 @@ type Expr_
     | Parens (C2 Expr)
 
 
+{-| Distinguishes lower-case and capitalized variable names.
+-}
 type VarType
     = LowVar
     | CapVar
@@ -253,6 +315,10 @@ type VarType
 -- DEFINITIONS
 
 
+{-| A top-level definition in a source module. `Define` represents a normal
+function or value binding; `Destruct` represents a pattern-destructuring
+binding used in places like `let` or top-level destructuring.
+-}
 type Def
     = Define (A.Located Name) (List (C1 Pattern)) (C1 Expr) (Maybe (C1 (C2 Type)))
     | Destruct Pattern (C1 Expr)
@@ -262,10 +328,17 @@ type Def
 -- PATTERN
 
 
+{-| A located source pattern node describing how values are matched in
+patterns and function arguments.
+-}
 type alias Pattern =
     A.Located Pattern_
 
 
+{-| The concrete variants of patterns used in source syntax. These include
+wildcard, variable, record, tuple, constructor, list, literal, and
+grouped patterns.
+-}
 type Pattern_
     = PAnything Name
     | PVar Name
@@ -287,10 +360,15 @@ type Pattern_
 -- TYPE
 
 
+{-| A located source type AST describing type expressions in source code.
+-}
 type alias Type =
     A.Located Type_
 
 
+{-| The concrete variants of type expressions in source syntax. Covers
+arrows, variables, named types, records, tuples, and parenthesized types.
+-}
 type Type_
     = TLambda (C0Eol Type) (C2Eol Type)
     | TVar Name
@@ -306,10 +384,19 @@ type Type_
 -- MODULE
 
 
+{-| The top-level representation of a source module parsed from text.
+
+    Fields include the syntax version, optional module name, exposing list,
+    documentation, imports, values, unions, type aliases, infix declarations,
+    and effects (ports/managers).
+
+-}
 type Module
     = Module SyntaxVersion (Maybe (A.Located Name)) (A.Located Exposing) Docs (List Import) (List (A.Located Value)) (List (A.Located Union)) (List (A.Located Alias)) (List (A.Located Infix)) Effects
 
 
+{-| Get the declared module name, or `Name.mainModule` when none is provided.
+-}
 getName : Module -> Name
 getName (Module _ maybeName _ _ _ _ _ _ _ _) =
     case maybeName of
@@ -320,52 +407,77 @@ getName (Module _ maybeName _ _ _ _ _ _ _ _) =
             Name.mainModule
 
 
+{-| Extract the imported module name from an import declaration wrapper.
+-}
 getImportName : Import -> Name
 getImportName (Import ( _, A.At _ name ) _ _) =
     name
 
 
+{-| A module import declaration with the imported module name (with
+formatting), an optional alias, and an exposing specification.
+-}
 type Import
     = Import (C1 (A.Located Name)) (Maybe (C2 Name)) (C2 Exposing)
 
 
+{-| A source value binding (function or top-level value) with formatting
+metadata and optional type annotation.
+-}
 type Value
     = Value FComments (C1 (A.Located Name)) (List (C1 Pattern)) (C1 Expr) (Maybe (C1 (C2 Type)))
 
 
+{-| A union type declaration with its name, type variables, and constructors.
+-}
 type Union
     = Union (C2 (A.Located Name)) (List (C1 (A.Located Name))) (List (C2Eol ( A.Located Name, List (C1 Type) )))
 
 
+{-| A type alias declaration with formatting and the aliased type.
+-}
 type Alias
     = Alias FComments (C2 (A.Located Name)) (List (C1 (A.Located Name))) (C1 Type)
 
 
+{-| An infix operator declaration including associativity, precedence, and
+the operator name.
+-}
 type Infix
     = Infix (C2 Name) (C1 Binop.Associativity) (C1 Binop.Precedence) (C1 Name)
 
 
+{-| A port declaration describing a named port and its type.
+-}
 type Port
     = Port FComments (C2 (A.Located Name)) Type
 
 
+{-| Module effects: no effects, a list of ports, or a manager declaration.
+-}
 type Effects
     = NoEffects
     | Ports (List Port)
     | Manager A.Region Manager
 
 
+{-| Effect manager kinds used for interop: commands, subscriptions, or FX.
+-}
 type Manager
     = Cmd (C2 (C2 (A.Located Name)))
     | Sub (C2 (C2 (A.Located Name)))
     | Fx (C2 (C2 (A.Located Name))) (C2 (C2 (A.Located Name)))
 
 
+{-| Documentation attached to a module: absent or present with comments.
+-}
 type Docs
     = NoDocs A.Region (List ( Name, Comment ))
     | YesDocs Comment (List ( Name, Comment ))
 
 
+{-| A source-level comment snippet attached to documentation or items.
+-}
 type Comment
     = Comment P.Snippet
 
@@ -374,17 +486,26 @@ type Comment
 -- EXPOSING
 
 
+{-| The module `exposing` clause: either `exposing (..)` or an explicit list
+of exposed values/operators with their formatting info.
+-}
 type Exposing
     = Open FComments FComments
     | Explicit (A.Located (List (C2 Exposed)))
 
 
+{-| An item within an explicit exposing list: a lower-case value, an upper-
+case type or constructor (with optional privacy), or an operator.
+-}
 type Exposed
     = Lower (A.Located Name)
     | Upper (A.Located Name) (C1 Privacy)
     | Operator A.Region Name
 
 
+{-| Privacy for exposed upper names: `Public` records the region where the
+`..` (dot-dot) was specified; `Private` indicates no public exposure.
+-}
 type Privacy
     = Public A.Region
     | Private

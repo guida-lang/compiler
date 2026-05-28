@@ -15,10 +15,23 @@ import Utils.Main as Utils
 -- BACKGROUND WRITER
 
 
+{-| A scope for background file writes.
+
+A `Scope` tracks asynchronous write tasks started during a build operation.
+When the enclosing scope completes, it waits for all scheduled writes to finish.
+
+-}
 type Scope
     = Scope (Utils.MVar (List (Utils.MVar ())))
 
 
+{-| Run a callback with a background write scope.
+
+The callback may schedule one or more writes with `writeBinary`. After the
+callback returns, `withScope` waits for all outstanding background writes to
+complete before yielding the final result.
+
+-}
 withScope : (Scope -> Task Never a) -> Task Never a
 withScope callback =
     Utils.newMVar (BE.list (\_ -> BE.unit ())) []
@@ -37,6 +50,13 @@ withScope callback =
             )
 
 
+{-| Schedule a binary file write inside a `Scope`.
+
+The write is performed asynchronously and the returned task completes
+immediately after scheduling. `withScope` will ensure the write finishes
+before the overall build step completes.
+
+-}
 writeBinary : (a -> BE.Encoder) -> Scope -> String -> a -> Task Never ()
 writeBinary toEncoder (Scope workList) path value =
     Utils.newEmptyMVar

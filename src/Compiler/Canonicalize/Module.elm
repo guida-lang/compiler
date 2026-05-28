@@ -4,6 +4,14 @@ module Compiler.Canonicalize.Module exposing
     , canonicalize
     )
 
+{-| Canonicalize source modules into the compiler's canonical AST form.
+
+This module resolves imports, builds the initial environment, canonicalizes
+expressions and declarations, detects recursive cycles, and reports unused
+import warnings.
+
+-}
+
 import Builder.Stuff as Stuff
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Source as Src
@@ -38,6 +46,9 @@ import Utils.Crash exposing (crash)
 -- RESULT
 
 
+{-| The result type used by module canonicalization, collecting warnings and
+errors during the process.
+-}
 type alias MResult i w a =
     R.RResult i w Error.Error a
 
@@ -46,15 +57,21 @@ type alias MResult i w a =
 -- USED MODULES TRACKING
 
 
+{-| The set of canonical module names referenced by a module's compiled AST.
+-}
 type alias UsedModules =
     EverySet.EverySet String ModuleName.Raw
 
 
+{-| Add a raw module name to the used modules set.
+-}
 trackModule : ModuleName.Raw -> UsedModules -> UsedModules
 trackModule moduleName used =
     EverySet.insert identity moduleName used
 
 
+{-| Add a canonical module reference to the used modules set.
+-}
 trackCanonical : IO.Canonical -> UsedModules -> UsedModules
 trackCanonical (IO.Canonical _ moduleName) used =
     trackModule moduleName used
@@ -64,6 +81,12 @@ trackCanonical (IO.Canonical _ moduleName) used =
 -- MODULES
 
 
+{-| Canonicalize a complete source module.
+
+This resolves imports, interfaces, declarations, exports, and effects, then
+returns the canonical module plus any warnings about unused imports.
+
+-}
 canonicalize : Target -> Stuff.Root -> Pkg.Name -> Dict String ModuleName.Raw I.Interface -> Src.Module -> MResult UsedModules (List W.Warning) Can.Module
 canonicalize target root pkg ifaces ((Src.Module syntaxVersion _ exports docs imports values _ _ binops effects) as modul) =
     let
@@ -108,6 +131,8 @@ canonicalize target root pkg ifaces ((Src.Module syntaxVersion _ exports docs im
 -- EXTRACT USED MODULES FROM CANONICAL AST
 
 
+{-| Walk a canonical module and collect the set of referenced modules.
+-}
 extractUsedModules : Can.Module -> MResult UsedModules (List W.Warning) ()
 extractUsedModules (Can.Module _ _ _ decls unions aliases _ effects) =
     extractUsedFromDecls decls
@@ -116,6 +141,8 @@ extractUsedModules (Can.Module _ _ _ decls unions aliases _ effects) =
         |> R.bind (\() -> extractUsedFromEffects effects)
 
 
+{-| Walk all canonical declarations and extract referenced module names.
+-}
 extractUsedFromDecls : Can.Decls -> MResult UsedModules (List W.Warning) ()
 extractUsedFromDecls decls =
     case decls of
@@ -132,6 +159,8 @@ extractUsedFromDecls decls =
                 |> R.bind (\_ -> extractUsedFromDecls rest)
 
 
+{-| Walk a single canonical definition and extract referenced module names.
+-}
 extractUsedFromDef : Can.Def -> MResult UsedModules (List W.Warning) ()
 extractUsedFromDef def =
     case def of
@@ -145,6 +174,8 @@ extractUsedFromDef def =
                 |> R.bind (\() -> extractUsedFromType tipe)
 
 
+{-| Walk a canonical expression and extract referenced module names.
+-}
 extractUsedFromExpr : Can.Expr -> MResult UsedModules (List W.Warning) ()
 extractUsedFromExpr (A.At _ expr_) =
     case expr_ of
@@ -257,12 +288,17 @@ extractUsedFromExpr (A.At _ expr_) =
             R.ok ()
 
 
+{-| Walk a case branch and extract module names referenced by both the
+pattern and the branch body.
+-}
 extractUsedFromCaseBranch : Can.CaseBranch -> MResult UsedModules (List W.Warning) ()
 extractUsedFromCaseBranch (Can.CaseBranch pattern expr) =
     extractUsedFromPattern pattern
         |> R.bind (\() -> extractUsedFromExpr expr)
 
 
+{-| Walk a canonical pattern and extract referenced module names.
+-}
 extractUsedFromPattern : Can.Pattern -> MResult UsedModules (List W.Warning) ()
 extractUsedFromPattern (A.At _ pattern_) =
     case pattern_ of
@@ -313,6 +349,9 @@ extractUsedFromPattern (A.At _ pattern_) =
                 |> R.fmap (\_ -> ())
 
 
+{-| Walk a canonical type and extract referenced module names from type
+constructors and aliases.
+-}
 extractUsedFromType : Can.Type -> MResult UsedModules (List W.Warning) ()
 extractUsedFromType tipe =
     case tipe of
@@ -348,11 +387,15 @@ extractUsedFromType tipe =
                 |> R.bind (\() -> extractUsedFromAliasType aliasType)
 
 
+{-| Walk a canonical field type and extract referenced module names.
+-}
 extractUsedFromFieldType : Can.FieldType -> MResult UsedModules (List W.Warning) ()
 extractUsedFromFieldType (Can.FieldType _ tipe) =
     extractUsedFromType tipe
 
 
+{-| Walk a canonical alias type and extract referenced module names.
+-}
 extractUsedFromAliasType : Can.AliasType -> MResult UsedModules (List W.Warning) ()
 extractUsedFromAliasType aliasType =
     case aliasType of
@@ -363,35 +406,52 @@ extractUsedFromAliasType aliasType =
             extractUsedFromType tipe
 
 
+{-| Walk all union type definitions and extract referenced module names.
+-}
 extractUsedFromUnions : Dict String Name Can.Union -> MResult UsedModules (List W.Warning) ()
 extractUsedFromUnions unions =
     R.traverse extractUsedFromUnion (Dict.values compare unions)
         |> R.fmap (\_ -> ())
 
 
+{-| Walk a canonical union definition and extract referenced module names
+from its constructors.
+-}
 extractUsedFromUnion : Can.Union -> MResult UsedModules (List W.Warning) ()
 extractUsedFromUnion (Can.Union _ ctors _ _) =
     R.traverse extractUsedFromCtor ctors
         |> R.fmap (\_ -> ())
 
 
+{-| Walk a constructor and extract referenced module names from its field
+types.
+-}
 extractUsedFromCtor : Can.Ctor -> MResult UsedModules (List W.Warning) ()
 extractUsedFromCtor (Can.Ctor _ _ _ types) =
     R.traverse extractUsedFromType types
         |> R.fmap (\_ -> ())
 
 
+{-| Walk all type aliases and extract referenced module names from alias
+definitions.
+-}
 extractUsedFromAliases : Dict String Name Can.Alias -> MResult UsedModules (List W.Warning) ()
 extractUsedFromAliases aliases =
     R.traverse extractUsedFromAlias (Dict.values compare aliases)
         |> R.fmap (\_ -> ())
 
 
+{-| Walk a type alias and extract referenced module names from its aliased
+type.
+-}
 extractUsedFromAlias : Can.Alias -> MResult UsedModules (List W.Warning) ()
 extractUsedFromAlias (Can.Alias _ tipe) =
     extractUsedFromType tipe
 
 
+{-| Walk module effects and extract referenced module names from ports and
+managers.
+-}
 extractUsedFromEffects : Can.Effects -> MResult UsedModules (List W.Warning) ()
 extractUsedFromEffects effects =
     case effects of
@@ -406,6 +466,9 @@ extractUsedFromEffects effects =
             extractUsedFromManager manager
 
 
+{-| Walk a port definition and extract referenced module names from its payload
+type.
+-}
 extractUsedFromPort : Can.Port -> MResult UsedModules (List W.Warning) ()
 extractUsedFromPort portDef =
     case portDef of
@@ -416,6 +479,9 @@ extractUsedFromPort portDef =
             extractUsedFromType payload
 
 
+{-| Walk an effect manager and extract referenced module names from its
+manager type.
+-}
 extractUsedFromManager : Can.Manager -> MResult UsedModules (List W.Warning) ()
 extractUsedFromManager manager =
     case manager of
@@ -429,6 +495,9 @@ extractUsedFromManager manager =
             R.ok ()
 
 
+{-| Track a referenced canonical home module while processing expressions,
+patterns, and types.
+-}
 trackHome : IO.Canonical -> MResult UsedModules (List W.Warning) ()
 trackHome home =
     R.modifyInfo (trackCanonical home)
@@ -438,6 +507,9 @@ trackHome home =
 -- GENERATE UNUSED IMPORT WARNINGS
 
 
+{-| Generate warnings for imported modules that are never used in the
+canonical module's AST.
+-}
 generateUnusedImportWarnings : Target -> List Src.Import -> MResult UsedModules (List W.Warning) ()
 generateUnusedImportWarnings target imports =
     R.getInfo
@@ -457,6 +529,8 @@ generateUnusedImportWarnings target imports =
             )
 
 
+{-| Remove imports for default built-in modules that are implicitly in scope.
+-}
 removeImplicitDefaults : Target -> List Src.Import -> List Src.Import
 removeImplicitDefaults target imports =
     let
@@ -467,11 +541,16 @@ removeImplicitDefaults target imports =
     List.filter (isExplicitImport defaultNames) imports
 
 
+{-| Determine whether an import is explicitly written in the source module,
+rather than implicitly provided by the platform.
+-}
 isExplicitImport : EverySet.EverySet String ModuleName.Raw -> Src.Import -> Bool
 isExplicitImport defaultNames (Src.Import ( _, A.At (A.Region (A.Position startRow _) _) name ) _ _) =
     not (EverySet.member identity name defaultNames && startRow <= 1)
 
 
+{-| Check whether a source import is present in the used module set.
+-}
 checkImportUsed : UsedModules -> Src.Import -> Maybe ( ModuleName.Raw, A.Region )
 checkImportUsed usedModules (Src.Import ( _, A.At region name ) _ _) =
     if EverySet.member identity name usedModules then
@@ -481,6 +560,8 @@ checkImportUsed usedModules (Src.Import ( _, A.At region name ) _ _) =
         Just ( name, region )
 
 
+{-| Emit a warning for a specific unused source import.
+-}
 warnUnusedImport : ( ModuleName.Raw, A.Region ) -> MResult UsedModules (List W.Warning) ()
 warnUnusedImport ( name, region ) =
     R.warn (W.UnusedImport region name)
@@ -490,6 +571,9 @@ warnUnusedImport ( name, region ) =
 -- CANONICALIZE BINOP
 
 
+{-| Convert a source infix operator definition into a canonical binary
+operator entry.
+-}
 canonicalizeBinop : A.Located Src.Infix -> ( Name, Can.Binop )
 canonicalizeBinop (A.At _ (Src.Infix ( _, op ) ( _, associativity ) ( _, precedence ) ( _, func ))) =
     ( op, Can.Binop_ associativity precedence func )
@@ -502,15 +586,19 @@ canonicalizeBinop (A.At _ (Src.Infix ( _, op ) ( _, associativity ) ( _, precede
 --
 -- 1. Detect cycles using ALL dependencies => needed for type inference
 -- 2. Detect cycles using DIRECT dependencies => nonterminating recursion
---
 
 
+{-| Canonicalize all top-level value definitions and perform cycle detection.
+-}
 canonicalizeValues : Target -> Stuff.Root -> SyntaxVersion -> Env.Env -> List (A.Located Src.Value) -> MResult i (List W.Warning) Can.Decls
 canonicalizeValues target root syntaxVersion env values =
     R.traverse (toNodeOne target root syntaxVersion env) values
         |> R.bind (\nodes -> detectCycles target (Graph.stronglyConnComp nodes))
 
 
+{-| Detect strongly connected components in canonical value definitions and
+build declaration structures.
+-}
 detectCycles : Target -> List (Graph.SCC NodeTwo) -> MResult i w Can.Decls
 detectCycles target sccs =
     case sccs of
@@ -535,6 +623,9 @@ detectCycles target sccs =
                             )
 
 
+{-| Analyze a strongly connected component of definitions and report
+invalid recursive cycles for direct recursion.
+-}
 detectBadCycles : Target -> Graph.SCC Can.Def -> MResult i w Can.Def
 detectBadCycles target scc =
     case scc of
@@ -556,6 +647,8 @@ detectBadCycles target scc =
             R.throw (Error.RecursiveDecl target region name names)
 
 
+{-| Extract the located name from a canonical definition.
+-}
 extractDefName : Can.Def -> A.Located Name
 extractDefName def =
     case def of
@@ -575,6 +668,8 @@ extractDefName def =
 -- This allows us to find cyclic values for type inference.
 
 
+{-| Graph node data for phase one cycle detection using all dependencies.
+-}
 type alias NodeOne =
     ( NodeTwo, Name.Name, List Name.Name )
 
@@ -584,10 +679,15 @@ type alias NodeOne =
 -- This allows us to detect cycles that definitely do not terminate.
 
 
+{-| Graph node data for phase two cycle detection using direct dependencies.
+-}
 type alias NodeTwo =
     ( Can.Def, Name, List Name )
 
 
+{-| Convert a source value into the first cycle-detection graph node,
+collecting all free local dependencies.
+-}
 toNodeOne : Target -> Stuff.Root -> SyntaxVersion -> Env.Env -> A.Located Src.Value -> MResult i (List W.Warning) NodeOne
 toNodeOne target root syntaxVersion env (A.At _ (Src.Value _ ( _, (A.At _ name) as aname ) srcArgs ( _, body ) maybeType)) =
     case maybeType of
@@ -644,6 +744,9 @@ toNodeOne target root syntaxVersion env (A.At _ (Src.Value _ ( _, (A.At _ name) 
                     )
 
 
+{-| Convert a canonical definition into a phase-two graph node, using direct
+only dependencies to detect non-terminating recursion.
+-}
 toNodeTwo : Name -> List arg -> Can.Def -> Expr.FreeLocals -> NodeTwo
 toNodeTwo name args def freeLocals =
     case args of
@@ -654,6 +757,9 @@ toNodeTwo name args def freeLocals =
             ( def, name, [] )
 
 
+{-| Add a dependency to the direct dependency list only when the symbol is
+used in a non-lazy way.
+-}
 addDirects : Name -> Expr.Uses -> List Name -> List Name
 addDirects name (Expr.Uses { direct }) directDeps =
     if direct > 0 then
@@ -667,6 +773,9 @@ addDirects name (Expr.Uses { direct }) directDeps =
 -- CANONICALIZE EXPORTS
 
 
+{-| Canonicalize module exports by validating that every exposed identifier
+exists and generating the canonical export set.
+-}
 canonicalizeExports :
     List (A.Located Src.Value)
     -> Dict String Name union
@@ -694,11 +803,16 @@ canonicalizeExports values unions aliases binops effects (A.At region exposing_)
                     )
 
 
+{-| Extract the canonical name from a source value definition for export lookup.
+-}
 valueToName : A.Located Src.Value -> ( Name, () )
 valueToName (A.At _ (Src.Value _ ( _, A.At _ name ) _ _ _)) =
     ( name, () )
 
 
+{-| Validate a single exposed item, ensuring values, operators, unions, aliases,
+and ports are exported correctly.
+-}
 checkExposed :
     Dict String Name value
     -> Dict String Name union
@@ -749,6 +863,8 @@ checkExposed values unions aliases binops effects exposed =
                 R.throw (Error.ExportNotFound region Error.BadType name (Dict.keys compare unions ++ Dict.keys compare aliases))
 
 
+{-| Check whether a name corresponds to an exported port in the module effects.
+-}
 checkPorts : Can.Effects -> Name -> Maybe (List Name)
 checkPorts effects name =
     case effects of
@@ -766,6 +882,8 @@ checkPorts effects name =
             Just []
 
 
+{-| Helper for creating a successful export tracker entry.
+-}
 ok : Name -> A.Region -> Can.Export -> MResult i w (Dups.Tracker (A.Located Can.Export))
 ok name region export =
     R.ok (Dups.one name region (A.At region export))

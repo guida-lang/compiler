@@ -24,6 +24,12 @@ module Compiler.AST.Optimized exposing
     , toKernelGlobal
     )
 
+{- Optimized AST and dependency graph definitions used after type checking.
+
+   This module exposes the compiler's internal optimized expression forms,
+   object graphs, module entry points, and binary serialization helpers.
+-}
+
 import Compiler.AST.Canonical as Can
 import Compiler.AST.Utils.Shader as Shader
 import Compiler.Data.Index as Index
@@ -44,6 +50,13 @@ import Utils.Bytes.Encode as BE
 -- EXPRESSIONS
 
 
+{-| Optimized expressions representing the compiler backend's lowered
+intermediate form.
+
+This expression set includes literals, local/global references, function
+closures, calls, pattern matching, records, tuples, and shader values.
+
+-}
 type Expr
     = Bool A.Region Bool
     | Chr A.Region String
@@ -77,10 +90,21 @@ type Expr
     | Shader Shader.Source (EverySet String Name) (EverySet String Name)
 
 
+{-| A globally unique identifier for an optimized top-level binding.
+
+A `Global` pairs a canonical module home with a variable name, ensuring the
+compiler can compare and serialize references consistently.
+
+-}
 type Global
     = Global IO.Canonical Name
 
 
+{-| Compare two global references by name and canonical home module.
+
+This ordering is used for deterministic graph and serialization traversal.
+
+-}
 compareGlobal : Global -> Global -> Order
 compareGlobal (Global home1 name1) (Global home2 name2) =
     case compare name1 name2 of
@@ -94,6 +118,11 @@ compareGlobal (Global home1 name1) (Global home2 name2) =
             GT
 
 
+{-| Convert a `Global` into a comparable string list key.
+
+This key is used for sorted maps and deterministic serialization.
+
+-}
 toComparableGlobal : Global -> List String
 toComparableGlobal (Global home name) =
     ModuleName.toComparableCanonical home ++ [ name ]
@@ -103,15 +132,32 @@ toComparableGlobal (Global home name) =
 -- DEFINITIONS
 
 
+{-| A local definition inside a `let` block or recursive cycle.
+
+`Def` includes both plain bindings and tail-recursive function definitions
+used by the optimizer.
+
+-}
 type Def
     = Def A.Region Name Expr
     | TailDef A.Region Name (List (A.Located Name)) Expr
 
 
+{-| A destructuring pattern used by `Destruct` expressions.
+
+`Destructor` names a value and a path into that value for field or index
+extraction.
+
+-}
 type Destructor
     = Destructor Name Path
 
 
+{-| A path into a compound value for destructuring.
+
+`Path` tracks access into arrays, records, unboxed values, and named roots.
+
+-}
 type Path
     = Index Index.ZeroBased Path
     | ArrayIndex Int Path
@@ -124,12 +170,23 @@ type Path
 -- BRANCHING
 
 
+{-| Decision-tree structure for optimized case analysis.
+
+A `Decider` represents the compiled form of pattern matching and conditional
+branching used by the optimized backend.
+
+-}
 type Decider a
     = Leaf a
     | Chain (List ( DT.Path, DT.Test )) (Decider a) (Decider a)
     | FanOut DT.Path (List ( DT.Test, Decider a )) (Decider a)
 
 
+{-| The result of a compiled branch.
+
+`Choice` either inlines an expression or jumps to a branch index.
+
+-}
 type Choice
     = Inline Expr
     | Jump Int
@@ -139,10 +196,23 @@ type Choice
 -- OBJECT GRAPH
 
 
+{-| A global object graph containing optimized nodes for every reachable
+binding.
+
+The first dictionary maps comparable global keys to nodes, while the second
+tracks record field names and their compiled identifiers.
+
+-}
 type GlobalGraph
     = GlobalGraph (Dict (List String) Global Node) (Dict String Name Int)
 
 
+{-| A module-local optimized graph and optional module `main`.
+
+`LocalGraph` is produced per module and later merged into the global graph for
+code generation.
+
+-}
 type LocalGraph
     = LocalGraph
         (Maybe Main)
@@ -151,11 +221,23 @@ type LocalGraph
         (Dict String Name Int)
 
 
+{-| The optional entry point for a module.
+
+`Static` indicates there is no runtime `main` expression, while `Dynamic`
+includes the message type and entry expression.
+
+-}
 type Main
     = Static
     | Dynamic Can.Type Expr
 
 
+{-| A node in the optimized object graph.
+
+`Node` captures the compiled representation of definitions, constructors,
+links, cycles, kernel code, and ports.
+
+-}
 type Node
     = Define Expr (EverySet (List String) Global)
     | TrackedDefine A.Region Expr (EverySet (List String) Global)
@@ -171,6 +253,12 @@ type Node
     | PortOutgoing Expr (EverySet (List String) Global)
 
 
+{-| The effect category for manager nodes.
+
+This distinguishes command-only, subscription-only, and combined effect
+handlers in the optimized graph.
+
+-}
 type EffectsType
     = Cmd
     | Sub
@@ -181,11 +269,19 @@ type EffectsType
 -- GRAPHS
 
 
+{-| Create an empty global optimized object graph.
+-}
 empty : GlobalGraph
 empty =
     GlobalGraph Dict.empty Dict.empty
 
 
+{-| Merge two global graphs by combining their nodes and field maps.
+
+This is used when multiple module graphs are combined into a single
+project-wide object graph.
+
+-}
 addGlobalGraph : GlobalGraph -> GlobalGraph -> GlobalGraph
 addGlobalGraph (GlobalGraph nodes1 fields1) (GlobalGraph nodes2 fields2) =
     GlobalGraph
@@ -193,6 +289,12 @@ addGlobalGraph (GlobalGraph nodes1 fields1) (GlobalGraph nodes2 fields2) =
         (Dict.union fields1 fields2)
 
 
+{-| Merge a module-local optimized graph into the global object graph.
+
+`LocalGraph` entries are added to the global graph while preserving the
+existing global nodes and field metadata.
+
+-}
 addLocalGraph : LocalGraph -> GlobalGraph -> GlobalGraph
 addLocalGraph (LocalGraph _ nodes1 fields1) (GlobalGraph nodes2 fields2) =
     GlobalGraph
@@ -200,6 +302,12 @@ addLocalGraph (LocalGraph _ nodes1 fields1) (GlobalGraph nodes2 fields2) =
         (Dict.union fields1 fields2)
 
 
+{-| Insert a kernel helper into the optimized global graph.
+
+Kernel helpers are represented as synthetic global nodes and may depend on
+other kernel globals or Guida values.
+
+-}
 addKernel : Name -> List K.Chunk -> GlobalGraph -> GlobalGraph
 addKernel shortName chunks (GlobalGraph nodes fields) =
     let
@@ -216,6 +324,12 @@ addKernel shortName chunks (GlobalGraph nodes fields) =
         (Dict.union (K.countFields chunks) fields)
 
 
+{-| Collect dependencies for a kernel chunk.
+
+Only Guida and kernel variables contribute global dependencies; raw JS and
+field references do not.
+
+-}
 addKernelDep : K.Chunk -> EverySet (List String) Global -> EverySet (List String) Global
 addKernelDep chunk deps =
     case chunk of
@@ -244,6 +358,12 @@ addKernelDep chunk deps =
             deps
 
 
+{-| Create a synthetic global identifier for a kernel helper.
+
+Kernel globals are located in the compiler kernel package and encoded using
+`Name.dollar` to avoid conflicts with normal Guida definitions.
+
+-}
 toKernelGlobal : Name.Name -> Global
 toKernelGlobal shortName =
     Global (IO.Canonical Pkg.kernel shortName) Name.dollar

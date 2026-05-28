@@ -16,6 +16,14 @@ module Builder.Guida.Details exposing
     , verifyInstall
     )
 
+{-| Manage Guida project details, cached build artifacts, and dependency verification.
+
+This module tracks build metadata for source files, resolves package and app
+dependencies, loads cached interfaces and object graphs, and verifies project
+install state for the Guida build tool.
+
+-}
+
 import Builder.BackgroundWriter as BW
 import Builder.Deps.Registry as Registry
 import Builder.Deps.Solver as Solver
@@ -61,14 +69,22 @@ import Utils.Task.Extra as Task
 -- DETAILS
 
 
+{-| Build metadata for the current project, including source outline, dependency
+state, local and foreign package references, and cached artifacts.
+-}
 type Details
     = Details File.Time ValidOutline BuildID (Dict String ModuleName.Raw Local) (Dict String ModuleName.Raw Foreign) Extras
 
 
+{-| A monotonic integer used to track interface and compile change versions.
+-}
 type alias BuildID =
     Int
 
 
+{-| A validated project outline that distinguishes between app and package
+builds.
+-}
 type ValidOutline
     = ValidApp (NE.Nonempty Outline.SrcDir)
     | ValidPkg Pkg.Name (List ModuleName.Raw) (Dict ( String, String ) Pkg.Name V.Version {- for docs in reactor -})
@@ -90,19 +106,39 @@ type ValidOutline
 --
 
 
+{-| Metadata about a local source module in the current project.
+
+`Local` tracks the file path, last modified time, imports, main entrypoint
+status, and build/change identifiers.
+
+-}
 type Local
     = Local FilePath File.Time (List ModuleName.Raw) Bool BuildID BuildID
 
 
+{-| A foreign dependency reference used by this project.
+
+The first package is the dependency itself and the second list contains its
+public transitive dependencies.
+
+-}
 type Foreign
     = Foreign Pkg.Name (List Pkg.Name)
 
 
+{-| Cached artifact state for a build.
+
+`ArtifactsCached` means existing cached artifacts should be reused.
+`ArtifactsFresh` means fresh interfaces and the object graph are available.
+
+-}
 type Extras
     = ArtifactsCached
     | ArtifactsFresh Interfaces Opt.GlobalGraph
 
 
+{-| Cached dependency interfaces for the current project.
+-}
 type alias Interfaces =
     Dict (List String) TypeCheck.Canonical I.DependencyInterface
 
@@ -111,6 +147,12 @@ type alias Interfaces =
 -- LOAD ARTIFACTS
 
 
+{-| Load cached compiled objects for the given project root.
+
+If the details already represent fresh artifacts, the object graph is returned
+immediately; otherwise it is read from disk.
+
+-}
 loadObjects : FilePath -> Details -> Task Never (MVar (Maybe Opt.GlobalGraph))
 loadObjects root (Details _ _ _ _ _ extras) =
     case extras of
@@ -121,6 +163,12 @@ loadObjects root (Details _ _ _ _ _ extras) =
             fork (Utils.maybeEncoder Opt.globalGraphEncoder) (File.readBinary Opt.globalGraphDecoder (Stuff.objects root))
 
 
+{-| Load cached dependency interfaces for the given project root.
+
+Returns a mutable container with the interface map when the artifacts are fresh
+or otherwise reads the serialized interfaces from disk.
+
+-}
 loadInterfaces : FilePath -> Details -> Task Never (MVar (Maybe Interfaces))
 loadInterfaces root (Details _ _ _ _ _ extras) =
     case extras of
@@ -135,6 +183,9 @@ loadInterfaces root (Details _ _ _ _ _ extras) =
 -- VERIFY INSTALL -- used by Install
 
 
+{-| Verify that a project can be installed by validating its dependency graph,
+outline, and current project state.
+-}
 verifyInstall : BW.Scope -> Stuff.Root -> Solver.Env -> Outline.Outline -> Task Never (Result Exit.Details ())
 verifyInstall scope root (Solver.Env cache manager connection registry) outline =
     File.getTime (Stuff.rootProjectFilePath root)
@@ -162,6 +213,9 @@ verifyInstall scope root (Solver.Env cache manager connection registry) outline 
 -- LOAD -- used by Make, Repl, Reactor, Test
 
 
+{-| Load build details for a project by checking cached artifacts and computing
+whether the project has fresh interfaces or needs recompilation.
+-}
 load : Reporting.Style -> BW.Scope -> Stuff.Root -> Task Never (Result Exit.Details Details)
 load style scope root =
     File.getTime (Stuff.rootProjectFilePath root)
@@ -188,6 +242,9 @@ load style scope root =
 -- GENERATE
 
 
+{-| Generate fresh build details for a project by preparing the verification
+environment, converting the outline, and validating dependencies.
+-}
 generate : Reporting.Style -> BW.Scope -> Stuff.Root -> File.Time -> Task Never (Result Exit.Details Details)
 generate style scope root time =
     Reporting.trackDetails style
@@ -215,6 +272,12 @@ generate style scope root time =
         )
 
 
+{-| Convert a raw outline into a validated Guida outline.
+
+For `GuidaRoot` package outlines this resolves the standard library constraints
+against the registry before verification proceeds.
+
+-}
 convertToGuidaOutline : Env -> Outline.Outline -> Task Exit.Details Outline.Outline
 convertToGuidaOutline (Env _ _ root cache _ connection registry) outline =
     case ( root, outline ) of
@@ -286,10 +349,20 @@ convertToGuidaOutline (Env _ _ root cache _ connection registry) outline =
 -- ENV
 
 
+{-| Runtime environment needed to verify project outlines and resolve package
+dependencies.
+
+It carries reporting state, the current project root, package cache, HTTP
+manager, solver connection mode, and registry client.
+
+-}
 type Env
     = Env Reporting.DKey BW.Scope Stuff.Root Stuff.PackageCache Http.Manager Solver.Connection Registry.Registry
 
 
+{-| Initialize the verification environment by reading the project outline and
+setting up registry state.
+-}
 initEnv : Reporting.DKey -> BW.Scope -> Stuff.Root -> Task Never (Result Exit.Details ( Env, Outline.Outline ))
 initEnv key scope root =
     fork resultRegistryProblemEnvEncoder Solver.initEnv
@@ -321,6 +394,9 @@ initEnv key scope root =
 -- VERIFY PROJECT
 
 
+{-| Verify a package outline by checking package constraints, duplicate
+dependency declarations, and package dependency resolution.
+-}
 verifyPkg : Env -> File.Time -> Outline.PkgOutline -> Task Exit.Details Details
 verifyPkg env time outline =
     case outline of
@@ -369,6 +445,9 @@ verifyPkg env time outline =
                 Task.fail (Exit.DetailsBadElmInPkg elm)
 
 
+{-| Verify an application outline by checking application dependency constraints
+and dependency consistency for Guida or Elm apps.
+-}
 verifyApp : Env -> File.Time -> Outline.AppOutline -> Task Exit.Details Details
 verifyApp env time outline =
     case outline of
@@ -411,6 +490,9 @@ verifyApp env time outline =
                 Task.fail (Exit.DetailsBadElmInAppOutline elmVersion)
 
 
+{-| Compute the exact app dependencies for the application outline, ensuring
+that duplicate dependencies are either allowed or rejected appropriately.
+-}
 checkAppDeps : Outline.AppOutline -> Task Exit.Details (Dict ( String, String ) Pkg.Name V.Version)
 checkAppDeps outline =
     case outline of
@@ -435,6 +517,8 @@ checkAppDeps outline =
 -- VERIFY CONSTRAINTS
 
 
+{-| Verify a set of package constraints against the package registry and solver.
+-}
 verifyConstraints : Env -> Dict ( String, String ) Pkg.Name Con.Constraint -> Task Exit.Details (Dict ( String, String ) Pkg.Name Solver.Details)
 verifyConstraints (Env _ _ root cache _ connection registry) constraints =
     Task.io (Solver.verify (Stuff.rootToTarget root) cache connection registry constraints)
@@ -477,6 +561,9 @@ verifyConstraints (Env _ _ root cache _ connection registry) constraints =
 -- UNION
 
 
+{-| Merge two dependency dictionaries while resolving conflicts using a
+custom tie breaker.
+-}
 union : (k -> comparable) -> (k -> k -> Order) -> (k -> v -> v -> Task Exit.Details v) -> Dict comparable k v -> Dict comparable k v -> Task Exit.Details (Dict comparable k v)
 union toComparable keyComparison tieBreaker deps1 deps2 =
     Dict.merge keyComparison
@@ -491,16 +578,22 @@ union toComparable keyComparison tieBreaker deps1 deps2 =
         (Task.succeed Dict.empty)
 
 
+{-| Reject duplicate Guida dependencies as an error.
+-}
 noGuidaDups : k -> v -> v -> Task Exit.Details v
 noGuidaDups _ _ _ =
     Task.fail Exit.DetailsHandEditedGuidaDependencies
 
 
+{-| Reject duplicate Elm dependencies as an error.
+-}
 noElmDups : k -> v -> v -> Task Exit.Details v
 noElmDups _ _ _ =
     Task.fail Exit.DetailsHandEditedElmDependencies
 
 
+{-| Allow duplicate Guida dependencies only when they are identical.
+-}
 allowEqualGuidaDups : k -> v -> v -> Task Exit.Details v
 allowEqualGuidaDups _ v1 v2 =
     if v1 == v2 then
@@ -510,6 +603,8 @@ allowEqualGuidaDups _ v1 v2 =
         Task.fail Exit.DetailsHandEditedGuidaDependencies
 
 
+{-| Allow duplicate Elm dependencies only when they are identical.
+-}
 allowEqualElmDups : k -> v -> v -> Task Exit.Details v
 allowEqualElmDups _ v1 v2 =
     if v1 == v2 then
@@ -523,6 +618,12 @@ allowEqualElmDups _ v1 v2 =
 -- FORK
 
 
+{-| Run a task in the background and store its result in an `MVar`.
+
+This is used to execute long-running dependency checks concurrently while
+still preserving deterministic result collection.
+
+-}
 fork : (a -> BE.Encoder) -> Task Never a -> Task Never (MVar a)
 fork encoder work =
     Utils.newEmptyMVar
@@ -537,6 +638,9 @@ fork encoder work =
 -- VERIFY DEPENDENCIES
 
 
+{-| Verify package dependencies by building or loading artifacts for each direct
+dependency and assembling the final project details.
+-}
 verifyDependencies : Env -> File.Time -> ValidOutline -> Dict ( String, String ) Pkg.Name Solver.Details -> Dict ( String, String ) Pkg.Name a -> Task Exit.Details Details
 verifyDependencies ((Env key scope root cache _ _ _) as env) time outline solution directDeps =
     Task.eio identity
@@ -594,11 +698,19 @@ verifyDependencies ((Env key scope root cache _ _ _) as env) time outline soluti
         )
 
 
+{-| Add the objects from a dependency artifact into the global object graph.
+-}
 addObjects : Artifacts -> Opt.GlobalGraph -> Opt.GlobalGraph
 addObjects (Artifacts _ objs) graph =
     Opt.addGlobalGraph objs graph
 
 
+{-| Add dependency interfaces for a package into the current interface map.
+
+If the package is a direct dependency, its interfaces remain public; otherwise
+they are privatized.
+
+-}
 addInterfaces : Dict ( String, String ) Pkg.Name a -> Pkg.Name -> Artifacts -> Interfaces -> Interfaces
 addInterfaces directDeps pkg (Artifacts ifaces _) dependencyInterfaces =
     Dict.union
@@ -617,6 +729,11 @@ addInterfaces directDeps pkg (Artifacts ifaces _) dependencyInterfaces =
         )
 
 
+{-| Gather public foreign package references from dependency interfaces.
+
+Public interfaces contribute a package name to a foreign import slot.
+
+-}
 gatherForeigns : Pkg.Name -> Artifacts -> Dict String ModuleName.Raw (OneOrMore.OneOrMore Pkg.Name) -> Dict String ModuleName.Raw (OneOrMore.OneOrMore Pkg.Name)
 gatherForeigns pkg (Artifacts ifaces _) foreigns =
     let
@@ -636,14 +753,22 @@ gatherForeigns pkg (Artifacts ifaces _) foreigns =
 -- VERIFY DEPENDENCY
 
 
+{-| Artifacts for a resolved dependency, including interface and object graph data.
+-}
 type Artifacts
     = Artifacts (Dict String ModuleName.Raw I.DependencyInterface) Opt.GlobalGraph
 
 
+{-| Result of verifying a single dependency, either a bad dependency error or
+artifact data.
+-}
 type alias Dep =
     Result (Maybe Exit.DetailsBadDep) Artifacts
 
 
+{-| Verify a single package dependency by checking local cache state or building
+it if necessary.
+-}
 verifyDep : Env -> MVar (Dict ( String, String ) Pkg.Name (MVar Dep)) -> Dict ( String, String ) Pkg.Name Solver.Details -> Pkg.Name -> Solver.Details -> Task Never Dep
 verifyDep ((Env key _ root cache manager _ _) as env) depsMVar solution pkg ((Solver.Details vsn directDeps) as details) =
     Utils.dirDoesDirectoryExist (Stuff.package cache pkg vsn ++ "/src")
@@ -698,14 +823,21 @@ verifyDep ((Env key _ root cache manager _ _) as env) depsMVar solution pkg ((So
 -- ARTIFACT CACHE
 
 
+{-| A cached artifact snapshot for a dependency, including fingerprints and
+artifact contents.
+-}
 type ArtifactCache
     = ArtifactCache (EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint) Artifacts
 
 
+{-| A dependency fingerprint that maps package names to exact versions.
+-}
 type alias Fingerprint =
     Dict ( String, String ) Pkg.Name V.Version
 
 
+{-| Convert a fingerprint into a comparable list representation for set storage.
+-}
 toComparableFingerprint : Fingerprint -> List ( ( String, String ), ( Int, Int, Int ) )
 toComparableFingerprint fingerprint =
     Dict.toList compare fingerprint
@@ -716,6 +848,12 @@ toComparableFingerprint fingerprint =
 -- BUILD
 
 
+{-| Build or verify a dependency package, using cached artifacts when possible.
+
+This function manages package download, artifact cache validation, and actual
+package compilation when the cache is stale.
+
+-}
 build : Target -> Env -> Reporting.DKey -> Stuff.PackageCache -> MVar (Dict ( String, String ) Pkg.Name (MVar Dep)) -> Pkg.Name -> Solver.Details -> Fingerprint -> EverySet (List ( ( String, String ), ( Int, Int, Int ) )) Fingerprint -> Task Never Dep
 build target (Env _ _ _ _ _ connection registry) key cache depsMVar pkg (Solver.Details vsn _) f fs =
     Stuff.findRootIn (Stuff.package cache pkg vsn)
@@ -896,11 +1034,15 @@ build target (Env _ _ _ _ _ connection registry) key cache depsMVar pkg (Solver.
 -- GATHER
 
 
+{-| Collect global object graph data from module compilation results.
+-}
 gatherObjects : Target -> Dict String ModuleName.Raw DResult -> Opt.GlobalGraph
 gatherObjects target results =
     Dict.foldr compare (addLocalGraph target) Opt.empty results
 
 
+{-| Add the local compile output for a module into the global object graph.
+-}
 addLocalGraph : Target -> ModuleName.Raw -> DResult -> Opt.GlobalGraph -> Opt.GlobalGraph
 addLocalGraph target name status graph =
     case status of
@@ -917,6 +1059,8 @@ addLocalGraph target name status graph =
             graph
 
 
+{-| Build the dependency interface set for exposed modules from compile results.
+-}
 gatherInterfaces : Dict String ModuleName.Raw () -> Dict String ModuleName.Raw DResult -> Dict String ModuleName.Raw I.DependencyInterface
 gatherInterfaces exposed artifacts =
     let
@@ -939,6 +1083,8 @@ gatherInterfaces exposed artifacts =
     Dict.merge compare onLeft onBoth onRight exposed artifacts Dict.empty
 
 
+{-| Extract a local package interface from a compile result, if available.
+-}
 toLocalInterface : (I.Interface -> a) -> DResult -> Maybe a
 toLocalInterface func result =
     case result of
@@ -959,11 +1105,15 @@ toLocalInterface func result =
 -- GATHER FOREIGN INTERFACES
 
 
+{-| Describes whether a foreign dependency interface is specific or ambiguous.
+-}
 type ForeignInterface
     = ForeignAmbiguous
     | ForeignSpecific I.Interface
 
 
+{-| Gather the effective foreign dependency interface for each referenced module.
+-}
 gatherForeignInterfaces : Dict ( String, String ) Pkg.Name Artifacts -> Dict String ModuleName.Raw ForeignInterface
 gatherForeignInterfaces directArtifacts =
     let
@@ -997,10 +1147,14 @@ gatherForeignInterfaces directArtifacts =
 -- CRAWL
 
 
+{-| Map of module names to the status values produced while crawling a project.
+-}
 type alias StatusDict =
     Dict String ModuleName.Raw (MVar (Maybe Status))
 
 
+{-| Status for a module discovered while crawling project dependencies.
+-}
 type Status
     = SLocal DocsStatus (Dict String ModuleName.Raw ()) Src.Module
     | SForeign I.Interface
@@ -1008,6 +1162,9 @@ type Status
     | SKernelForeign
 
 
+{-| Crawl a module reference to determine whether it should be compiled,
+resolved as a foreign interface, or treated as kernel code.
+-}
 crawlModule : Target -> Stuff.Root -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> Task Never (Maybe Status)
 crawlModule target root foreignDeps mvar pkg src docsStatus name =
     let
@@ -1057,6 +1214,9 @@ crawlModule target root foreignDeps mvar pkg src docsStatus name =
             )
 
 
+{-| Parse and crawl a source file to build its import status and determine whether
+it contributes a local module status.
+-}
 crawlFile : Target -> Stuff.Root -> SyntaxVersion -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> DocsStatus -> ModuleName.Raw -> FilePath -> Task Never (Maybe Status)
 crawlFile target root syntaxVersion foreignDeps mvar pkg src docsStatus expectedName path =
     File.readUtf8 path
@@ -1076,6 +1236,9 @@ crawlFile target root syntaxVersion foreignDeps mvar pkg src docsStatus expected
             )
 
 
+{-| Crawl a module's import list to resolve referenced modules and build the
+module dependency status map.
+-}
 crawlImports : Target -> Stuff.Root -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> List Src.Import -> Task Never (Dict String ModuleName.Raw ())
 crawlImports target root foreignDeps mvar pkg src imports =
     Utils.takeMVar statusDictDecoder mvar
@@ -1100,6 +1263,9 @@ crawlImports target root foreignDeps mvar pkg src imports =
             )
 
 
+{-| Crawl a kernel JavaScript dependency and treat it as either local kernel code
+or a foreign kernel import.
+-}
 crawlKernel : Target -> Stuff.Root -> Dict String ModuleName.Raw ForeignInterface -> MVar StatusDict -> Pkg.Name -> FilePath -> ModuleName.Raw -> Task Never (Maybe Status)
 crawlKernel target root foreignDeps mvar pkg src name =
     let
@@ -1128,6 +1294,8 @@ crawlKernel target root foreignDeps mvar pkg src name =
             )
 
 
+{-| Extract the package name from a resolved foreign interface, if available.
+-}
 getDepHome : ForeignInterface -> Maybe Pkg.Name
 getDepHome fi =
     case fi of
@@ -1142,6 +1310,9 @@ getDepHome fi =
 -- COMPILE
 
 
+{-| A compile result for a source dependency, including interfaces, local
+object graph fragments, or kernel data.
+-}
 type DResult
     = RLocal I.Interface Opt.LocalGraph (Maybe Docs.Module)
     | RForeign I.Interface
@@ -1149,6 +1320,8 @@ type DResult
     | RKernelForeign
 
 
+{-| Compile a module based on its status, producing a `DResult` when possible.
+-}
 compile : Target -> Stuff.Root -> Pkg.Name -> MVar (Dict String ModuleName.Raw (MVar (Maybe DResult))) -> Status -> Task Never (Maybe DResult)
 compile target root pkg mvar status =
     case status of
@@ -1196,6 +1369,8 @@ compile target root pkg mvar status =
             Task.succeed (Just RKernelForeign)
 
 
+{-| Extract the interface from a compile result when present.
+-}
 getInterface : DResult -> Maybe I.Interface
 getInterface result =
     case result of
@@ -1216,11 +1391,16 @@ getInterface result =
 -- MAKE DOCS
 
 
+{-| Whether generated package docs are already present on disk.
+-}
 type DocsStatus
     = DocsNeeded
     | DocsNotNeeded
 
 
+{-| Determine if documentation needs to be generated for the given package
+version by checking for an existing `docs.json` file in package cache.
+-}
 getDocsStatus : Stuff.PackageCache -> Pkg.Name -> V.Version -> Task Never DocsStatus
 getDocsStatus cache pkg vsn =
     File.exists (Stuff.package cache pkg vsn ++ "/docs.json")
@@ -1234,6 +1414,8 @@ getDocsStatus cache pkg vsn =
             )
 
 
+{-| Generate docs for a module when documentation is required.
+-}
 makeDocs : Target -> DocsStatus -> Can.Module -> Maybe Docs.Module
 makeDocs target status modul =
     case status of
@@ -1249,6 +1431,8 @@ makeDocs target status modul =
             Nothing
 
 
+{-| Write generated package docs to the package cache when needed.
+-}
 writeDocs : Stuff.PackageCache -> Pkg.Name -> V.Version -> DocsStatus -> Dict String ModuleName.Raw DResult -> Task Never ()
 writeDocs cache pkg vsn status results =
     case status of
@@ -1260,6 +1444,8 @@ writeDocs cache pkg vsn status results =
             Task.succeed ()
 
 
+{-| Extract generated documentation from a compile result.
+-}
 toDocs : DResult -> Maybe Docs.Module
 toDocs result =
     case result of
@@ -1280,6 +1466,9 @@ toDocs result =
 -- DOWNLOAD PACKAGE
 
 
+{-| Download a package archive from the remote package endpoint and store it in
+package cache.
+-}
 downloadPackage : Stuff.PackageCache -> Http.Manager -> Pkg.Name -> V.Version -> Task Never (Result Exit.PackageProblem ())
 downloadPackage cache manager pkg vsn =
     Website.metadata pkg vsn "endpoint.json"
@@ -1309,6 +1498,9 @@ downloadPackage cache manager pkg vsn =
             )
 
 
+{-| Decode a package endpoint response containing the archive URL and
+expected hash.
+-}
 endpointDecoder : D.Decoder e ( String, String )
 endpointDecoder =
     D.field "url" D.string

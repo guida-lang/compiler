@@ -1,5 +1,13 @@
 module Compiler.Type.Solve exposing (run)
 
+{-| The type solver for the compiler.
+
+This module drives type constraint solving for canonical modules. It converts
+constraints into mutable solver variables, handles let-generalization,
+occurs-checks, type copying, and produces final annotations or typed errors.
+
+-}
+
 import Array exposing (Array)
 import Compiler.AST.Canonical as Can
 import Compiler.Data.Name as Name
@@ -28,6 +36,13 @@ import Utils.Main as Utils
 -- RUN SOLVER
 
 
+{-| Solve a type constraint and return either a non-empty list of type errors
+or a map of variable names to their inferred annotations.
+
+This is the entry point used by the compiler after canonicalization and before
+optimization.
+
+-}
 run : Target -> Constraint -> IO (Result (NE.Nonempty Error.Error) (Dict String Name.Name Can.Annotation))
 run target constraint =
     MVector.replicate 8 []
@@ -47,6 +62,8 @@ run target constraint =
             )
 
 
+{-| Initial solver state with no bound variables and no errors.
+-}
 emptyState : State
 emptyState =
     State Dict.empty (Type.nextMark Type.noMark) []
@@ -60,19 +77,37 @@ type alias Env =
     Dict String Name.Name Variable
 
 
+{-| The current allocation environment mapping source names to solver
+variables.
+-}
 type alias Pools =
     IORef (Array (Maybe (List Variable)))
 
 
+{-| The mutable solver state holding the current environment, fresh-variable
+marks, and accumulated errors.
+-}
 type State
     = State Env Mark (List Error.Error)
 
 
+{-| Solve a constraint within a given environment and rank scope.
+
+This function loops through the constraint tree and updates the solver state
+incrementally.
+
+-}
 solve : Target -> Env -> Int -> Pools -> State -> Constraint -> IO State
 solve target env rank pools state constraint =
     IO.loop (solveHelp target) ( ( env, rank ), ( pools, state ), ( constraint, identity ) )
 
 
+{-| The solver loop body used by `IO.loop`.
+
+It evaluates one constraint at a time and threads continuity through a
+callback that resumes execution after each step.
+
+-}
 solveHelp : Target -> ( ( Env, Int ), ( Pools, State ), ( Type.Constraint, IO State -> IO State ) ) -> IO (IO.Step ( ( Env, Int ), ( Pools, State ), ( Type.Constraint, IO State -> IO State ) ) State)
 solveHelp target ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), ( constraint, cont ) ) =
     case constraint of
@@ -339,6 +374,12 @@ solveHelp target ( ( env, rank ), ( pools, (State _ sMark sErrors) as state ), (
 -- Check that a variable has rank == noRank, meaning that it can be generalized.
 
 
+{-| Validate that a variable is generic and can be generalized.
+
+If the variable is not generic, this reports an internal compiler error with
+debug information.
+
+-}
 isGeneric : Target -> Variable -> IO ()
 isGeneric target var =
     UF.get var
@@ -367,6 +408,12 @@ isGeneric target var =
 -- EXPECTATIONS TO VARIABLE
 
 
+{-| Convert a reported expected type into a solver variable.
+
+This is used to compare the actual inferred type against the expected type
+from annotations or context.
+
+-}
 expectedToVariable : Int -> Pools -> Error.Expected Type -> IO Variable
 expectedToVariable rank pools expectation =
     typeToVariable rank pools <|
@@ -381,6 +428,11 @@ expectedToVariable rank pools expectation =
                 tipe
 
 
+{-| Convert a pattern-matching expected type into a solver variable.
+
+Pattern expectations are used to infer the type of pattern branches safely.
+
+-}
 patternExpectationToVariable : Int -> Pools -> Error.PExpected Type -> IO Variable
 patternExpectationToVariable rank pools expectation =
     typeToVariable rank pools <|
@@ -396,6 +448,8 @@ patternExpectationToVariable rank pools expectation =
 -- ERROR HELPERS
 
 
+{-| Add a solver error to the current state.
+-}
 addError : State -> Error.Error -> State
 addError (State savedEnv rank errors) err =
     State savedEnv rank (err :: errors)
@@ -405,6 +459,12 @@ addError (State savedEnv rank errors) err =
 -- OCCURS CHECK
 
 
+{-| Perform an occurs check for a variable in a type-level graph.
+
+If a variable occurs within its own definition, an infinite type error is
+registered.
+
+-}
 occurs : Target -> State -> ( Name.Name, A.Located Variable ) -> IO State
 occurs target state ( name, A.At region variable ) =
     Occurs.occurs variable
@@ -507,6 +567,8 @@ generalize youngMark visitMark youngRank pools =
             )
 
 
+{-| Bucket variables by rank for a young pool during generalization.
+-}
 poolToRankTable : Mark -> Int -> List Variable -> IO (IORef (Array (Maybe (List Variable))))
 poolToRankTable youngMark youngRank youngInhabitants =
     MVector.replicate (youngRank + 1) []
@@ -537,6 +599,12 @@ poolToRankTable youngMark youngRank youngInhabitants =
 --
 
 
+{-| Recompute the rank of a solver variable during generalization.
+
+This prevents ranks from increasing as the solver traverses nested type
+structures.
+
+-}
 adjustRank : Mark -> Mark -> Int -> Variable -> IO Int
 adjustRank youngMark visitMark groupRank var =
     UF.get var
@@ -570,6 +638,8 @@ adjustRank youngMark visitMark groupRank var =
             )
 
 
+{-| Recompute the rank for a content value during rank adjustment.
+-}
 adjustRankContent : Mark -> Mark -> Int -> Content -> IO Int
 adjustRankContent youngMark visitMark groupRank content =
     let
@@ -638,6 +708,8 @@ adjustRankContent youngMark visitMark groupRank content =
 -- REGISTER VARIABLES
 
 
+{-| Register new solver variables in the current pool and assign them rank.
+-}
 introduce : Int -> Pools -> List Variable -> IO ()
 introduce rank pools variables =
     MVector.modify pools
@@ -658,6 +730,12 @@ introduce rank pools variables =
 -- TYPE TO VARIABLE
 
 
+{-| Convert a solver type expression into a mutable solver variable.
+
+This is the top-level entry point for translating `Type` values into the
+variable-based representation used by the unifier.
+
+-}
 typeToVariable : Int -> Pools -> Type -> IO Variable
 typeToVariable rank pools tipe =
     typeToVar rank pools Dict.empty tipe
@@ -672,6 +750,8 @@ typeToVariable rank pools tipe =
 -- valve for now.
 
 
+{-| Convert a type expression to a solver variable, tracking alias bindings.
+-}
 typeToVar : Int -> Pools -> Dict String Name.Name Variable -> Type -> IO Variable
 typeToVar rank pools aliasDict tipe =
     let
@@ -748,6 +828,9 @@ typeToVar rank pools aliasDict tipe =
                     )
 
 
+{-| Allocate a fresh solver variable for the given content and register it in
+the current pool.
+-}
 register : Int -> Pools -> Content -> IO Variable
 register rank pools content =
     UF.fresh (Descriptor content rank Type.noMark Nothing)
@@ -758,11 +841,15 @@ register rank pools content =
             )
 
 
+{-| Prebuilt content for an empty record value.
+-}
 emptyRecord1 : Content
 emptyRecord1 =
     IO.Structure IO.EmptyRecord1
 
 
+{-| Prebuilt content for a unit value.
+-}
 unit1 : Content
 unit1 =
     IO.Structure IO.Unit1
@@ -772,6 +859,12 @@ unit1 =
 -- SOURCE TYPE TO VARIABLE
 
 
+{-| Convert a canonical source type into a solver variable.
+
+This handles the translation of `Can.Type` values into the mutable solver
+representation used for unification.
+
+-}
 srcTypeToVariable : Int -> Pools -> Dict String Name.Name () -> Can.Type -> IO Variable
 srcTypeToVariable rank pools freeVars srcType =
     let
@@ -804,6 +897,9 @@ srcTypeToVariable rank pools freeVars srcType =
             )
 
 
+{-| Convert a canonical source type to a solver variable while honoring
+flexible type variables from the environment.
+-}
 srcTypeToVar : Int -> Pools -> Dict String Name.Name Variable -> Can.Type -> IO Variable
 srcTypeToVar rank pools flexVars srcType =
     let
@@ -886,6 +982,8 @@ srcTypeToVar rank pools flexVars srcType =
                     )
 
 
+{-| Convert a canonical source field type to a solver variable.
+-}
 srcFieldTypeToVar : Int -> Pools -> Dict String Name.Name Variable -> Can.FieldType -> IO Variable
 srcFieldTypeToVar rank pools flexVars (Can.FieldType _ srcTipe) =
     srcTypeToVar rank pools flexVars srcTipe
@@ -895,6 +993,12 @@ srcFieldTypeToVar rank pools flexVars (Can.FieldType _ srcTipe) =
 -- COPY
 
 
+{-| Make a copy of a variable that is eligible for instantiation.
+
+This is used when a rigid or generic type must be duplicated for a new
+occurrence without sharing solver structure.
+
+-}
 makeCopy : Int -> Pools -> Variable -> IO Variable
 makeCopy rank pools var =
     makeCopyHelp rank pools var
@@ -905,6 +1009,8 @@ makeCopy rank pools var =
             )
 
 
+{-| Helper for recursively copying a solver variable's structure.
+-}
 makeCopyHelp : Int -> Pools -> Variable -> IO Variable
 makeCopyHelp maxRank pools variable =
     UF.get variable
@@ -987,6 +1093,8 @@ makeCopyHelp maxRank pools variable =
 -- RESTORE
 
 
+{-| Restore a copied variable back to its original, non-copied state.
+-}
 restore : Variable -> IO ()
 restore variable =
     UF.get variable
@@ -1002,6 +1110,8 @@ restore variable =
             )
 
 
+{-| Restore the content of a copied variable recursively.
+-}
 restoreContent : Content -> IO ()
 restoreContent content =
     case content of
@@ -1052,6 +1162,9 @@ restoreContent content =
 -- TRAVERSE FLAT TYPE
 
 
+{-| Traverse a flat type structure and apply an effectful transformation to
+each referenced variable.
+-}
 traverseFlatType : (Variable -> IO Variable) -> IO.FlatType -> IO IO.FlatType
 traverseFlatType f flatType =
     case flatType of
