@@ -1,5 +1,6 @@
 module Compiler.Compile exposing
     ( Artifacts(..)
+    , canonicalize
     , compile
     )
 
