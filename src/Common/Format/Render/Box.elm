@@ -2362,8 +2362,8 @@ formatExpression importInfo (A.At region aexpr) =
                         ( _, ( pat_, body_ ) ) ->
                             Box.stack1
                                 [ pat_
-                                , Box.line (Box.keyword "->")
-                                , Box.indent body_
+                                , Box.indent (Box.line (Box.keyword "->"))
+                                , Box.indent (Box.indent body_)
                                 ]
             in
             ( AmbiguousEnd
