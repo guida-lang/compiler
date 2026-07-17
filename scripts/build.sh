@@ -22,7 +22,7 @@ esac
 js="$filepath.js"
 min="$filepath.min.js"
 
-guida make --optimize --output=$js $elm_entry
+elm make --optimize --output=$js $elm_entry
 node scripts/replacements.js $js
 
 uglifyjs $js --compress "pure_funcs=[F2,F3,F4,F5,F6,F7,F8,F9,A2,A3,A4,A5,A6,A7,A8,A9],pure_getters,keep_fargs=false,unsafe_comps,unsafe" | uglifyjs --mangle --output $min

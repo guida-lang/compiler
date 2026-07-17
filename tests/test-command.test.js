@@ -13,7 +13,7 @@ describe("guida test command", () => {
             "source-directories": [
                 "src"
             ],
-            "elm-version": "0.19.1",
+            "elm-version": "0.19.2",
             dependencies: {
                 direct: {
                     "elm/browser": "1.0.2",
@@ -58,7 +58,7 @@ describe("guida test command", () => {
             "source-directories": [
                 "src"
             ],
-            "elm-version": "0.19.1",
+            "elm-version": "0.19.2",
             dependencies: {
                 direct: {
                     "elm/browser": "1.0.2",
@@ -105,7 +105,7 @@ describe("guida test command", () => {
             "source-directories": [
                 "src"
             ],
-            "elm-version": "0.19.1",
+            "elm-version": "0.19.2",
             dependencies: {
                 direct: {
                     "elm/browser": "1.0.2",
@@ -202,7 +202,7 @@ suite =
             license: "BSD-3-Clause",
             version: "1.0.0",
             "exposed-modules": [],
-            "elm-version": "0.19.1 <= v < 1.0.0",
+            "elm-version": "0.19.2 <= v < 1.0.0",
             dependencies: {
                 "elm/core": "1.0.0 <= v < 2.0.0"
             },

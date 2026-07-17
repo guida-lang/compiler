@@ -14,7 +14,7 @@ describe("Bytes over Flags and Ports", () => {
             "source-directories": [
                 "src"
             ],
-            "elm-version": "0.19.1",
+            "elm-version": "0.19.2",
             dependencies: {
                 direct: {
                     "elm/browser": "1.0.2",
@@ -75,7 +75,7 @@ main =
             "source-directories": [
                 "src"
             ],
-            "elm-version": "0.19.1",
+            "elm-version": "0.19.2",
             dependencies: {
                 direct: {
                     "elm/browser": "1.0.2",

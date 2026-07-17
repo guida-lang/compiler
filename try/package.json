@@ -7,6 +7,8 @@
     "start": "./server.js"
   },
   "dependencies": {
+    "elm": "^0.19.2-0",
+    "elm-test": "^0.19.2-0",
     "esbuild": "^0.28.0",
     "express": "^5.2.1",
     "guida": "file:..",

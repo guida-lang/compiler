@@ -23,7 +23,7 @@ This document outlines guidelines and best practices for contributing code, idea
 ## Getting Started
 
 Guida is a functional programming language that builds upon the solid foundation of Elm, offering
-backward compatibility with all existing Elm 0.19.1 projects.
+backward compatibility with all existing Elm 0.19.2 projects.
 
 Find out more about our [Vision](README.md#vision) on the project [README](README.md).
 

@@ -1,7 +1,7 @@
 # Guida programming language
 
 Guida is a functional programming language that builds upon the solid foundation of Elm, offering
-backward compatibility with all existing Elm 0.19.1 projects.
+backward compatibility with all existing Elm 0.19.2 projects.
 
 Join the [Guida Discord server](https://discord.gg/B6WgPzf5Aa) to connect with the community, ask 
 questions, and share ideas.
@@ -187,6 +187,7 @@ The `<newversion>` value relates to the `version` field value found on `package.
 
 - Initial transpilation from Haskell to Elm done based on [Elm compiler v0.19.1](https://github.com/elm/compiler/releases/tag/0.19.1)
   (more specifically [commit c9aefb6](https://github.com/elm/compiler/commit/c9aefb6230f5e0bda03205ab0499f6e4af924495))
+- Most recent update refers to [commit cce7a8b](https://github.com/elm/compiler/commit/cce7a8bbd8fe690fc83fa795f8d7e02505d1f25f) - still missing the changes done as part of 0.19.2, found on https://github.com/elm/compiler/compare/cce7a8bbd8fe690fc83fa795f8d7e02505d1f25f...0.19.2
 - Terminal logic implementation based on https://github.com/albertdahlin/elm-posix
 
 # Resources
