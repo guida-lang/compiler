@@ -6,7 +6,7 @@ import Compiler.AST.Source as Src
 import Compiler.AST.Utils.Binop as Binop
 import Compiler.Compile as Compile
 import Compiler.Data.Index as Index
-import Compiler.Data.Name as Name
+import Compiler.Data.Name as Name exposing (Name)
 import Compiler.Generate.Target as Target
 import Compiler.Guida.Interface as I
 import Compiler.Guida.Package as Pkg
@@ -26,6 +26,7 @@ suite =
             [ Test.test "add" <|
                 \_ ->
                     let
+                        ifaces : Dict.Dict Name Name I.Interface
                         ifaces =
                             Dict.fromList identity
                                 [ ( Name.platform, I.Interface Pkg.core Dict.empty (Dict.singleton identity "Program" (I.ClosedUnion (Can.Union [ "flags", "model", "msg" ] [ Can.Ctor "Program" Index.first 0 [] ] 1 Can.Enum))) Dict.empty Dict.empty )

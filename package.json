@@ -41,7 +41,7 @@
     "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.60.0",
     "@types/node": "^25.9.1",
-    "elm": "^0.19.1-6",
+    "elm": "^0.19.2-0",
     "elm-format": "^0.8.8",
     "elm-review": "^2.13.5",
     "elm-test": "^0.19.1-revision17",

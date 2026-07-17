@@ -1786,7 +1786,7 @@ formatPattern apattern =
 
         Src.PRecord ( _, fields ) ->
             ( SyntaxSeparated
-            , GuidaStructure.group True "{" "," "}" False (List.map (formatCommented << Src.c2map (Box.line << formatLowercaseIdentifier [] << A.toValue)) (List.reverse fields))
+            , GuidaStructure.group True "{" "," "}" False (List.map (formatCommented << Src.c2map (Box.line << formatLowercaseIdentifier [] << A.toValue)) fields)
             )
 
         Src.PAlias aliasPattern name ->

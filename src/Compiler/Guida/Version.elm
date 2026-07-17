@@ -101,7 +101,7 @@ compiler =
 
 elmCompiler : Version
 elmCompiler =
-    Version 0 19 1
+    Version 0 19 2
 
 
 

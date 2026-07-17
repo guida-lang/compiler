@@ -193,7 +193,7 @@ recordHelp start vars =
                             )
                 )
         , P.word1 '}' E.PRecordEnd
-            |> P.bind (\_ -> P.addEnd start (Src.PRecord ( [], vars )))
+            |> P.bind (\_ -> P.addEnd start (Src.PRecord ( [], List.reverse vars )))
         ]
 
 

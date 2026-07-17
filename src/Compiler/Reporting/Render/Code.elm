@@ -194,7 +194,9 @@ renderPair source region1 region2 =
 
             line : String
             line =
-                List.head (List.filter (\( row, _ ) -> row == startRow1) source) |> Maybe.map Tuple.second |> Maybe.withDefault ""
+                List.head (List.filter (\( row, _ ) -> row == startRow1) source)
+                    |> Maybe.map Tuple.second
+                    |> Maybe.withDefault ""
         in
         OneLine
             (D.vcat
